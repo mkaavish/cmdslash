@@ -1,0 +1,20 @@
+# Xcode
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Secrets - never commit these
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
