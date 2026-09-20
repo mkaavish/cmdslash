@@ -161,6 +161,30 @@ final class OverlayViewModel {
                 try Task.checkCancellation()
                 phase = .completed(summary: "Opened \(url.lastPathComponent)")
 
+            case "find_file":
+                guard let query = call.input["query"] as? String else {
+                    phase = .failed(message: "Model returned a malformed find_file call")
+                    return
+                }
+                let kind = call.input["kind"] as? String
+                phase = .executing(step: "Searching for \(query)...")
+                let matches = try await FindFileTool().execute(query: query, kind: kind)
+                try Task.checkCancellation()
+                if let top = matches.first {
+                    let suffix = matches.count > 1 ? " (+\(matches.count - 1) more)" : ""
+                    phase = .completed(summary: "Found \(top.name)\(suffix)")
+                }
+
+            case "read_file":
+                guard let path = call.input["path"] as? String else {
+                    phase = .failed(message: "Model returned a malformed read_file call")
+                    return
+                }
+                phase = .executing(step: "Reading \(path)...")
+                let result = try ReadFileTool().execute(path: path)
+                try Task.checkCancellation()
+                phase = .completed(summary: "Read \(result.content.count) characters from \(result.fileName)")
+
             default:
                 phase = .failed(message: "Unknown tool: \(call.name)")
             }

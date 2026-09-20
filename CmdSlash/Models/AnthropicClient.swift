@@ -84,6 +84,38 @@ struct AnthropicClient {
                     ],
                     "required": ["name"]
                 ]
+            ],
+            [
+                "name": "find_file",
+                "description": "Search for a file by name using Spotlight and reveal the best match in Finder. Matches are ranked most-recently-modified first, so this is the right tool for things like \"find the PDF I downloaded yesterday\".",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "query": [
+                            "type": "string",
+                            "description": "A keyword or partial filename to search for, e.g. \"invoice\" or \"resume\"."
+                        ],
+                        "kind": [
+                            "type": "string",
+                            "description": "Optional file kind filter, e.g. \"pdf\" or \"image\"."
+                        ]
+                    ],
+                    "required": ["query"]
+                ]
+            ],
+            [
+                "name": "read_file",
+                "description": "Read the text content of a file (plain text, code, or PDF) at a known path.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "path": [
+                            "type": "string",
+                            "description": "A file path, e.g. \"~/Downloads/invoice.pdf\"."
+                        ]
+                    ],
+                    "required": ["path"]
+                ]
             ]
         ]
 
