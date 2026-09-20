@@ -250,6 +250,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "CmdSlash listens after you press Cmd+/ so you can speak an instruction instead of typing it.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "CmdSlash uses on-device speech recognition to turn what you say into text.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
@@ -277,6 +279,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "CmdSlash listens after you press Cmd+/ so you can speak an instruction instead of typing it.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "CmdSlash uses on-device speech recognition to turn what you say into text.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;

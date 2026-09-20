@@ -16,11 +16,19 @@ final class OverlayViewModel {
 
     var inputText: String = ""
     var phase: Phase = .idle
+    var isListening: Bool = false
     /// Bumped each time the overlay is shown so the view can re-focus the text field
     /// (see Docs/PLANNING.md §15 — voice/text should be ready the instant the panel appears).
     var focusToken: Int = 0
 
     var onDismissRequested: (() -> Void)?
+
+    private let speechRecognizer = SpeechRecognizer()
+    /// True only while `inputText` is being set from a speech transcript, so the view can tell a
+    /// speech-driven update apart from the user actually typing (Docs/PLANNING.md §6: typing
+    /// silently discards voice capture).
+    private(set) var isApplyingSpeechUpdate = false
+    private var silenceTask: Task<Void, Never>?
 
     var isBusy: Bool {
         switch phase {
@@ -34,10 +42,65 @@ final class OverlayViewModel {
         focusToken += 1
     }
 
+    /// Called when the overlay becomes visible — voice starts immediately per Docs/PLANNING.md §6
+    /// ("press Cmd+/ and immediately begin listening"), no separate mode switch.
+    func startVoiceCapture() {
+        speechRecognizer.onPartialTranscript = { [weak self] transcript in
+            self?.applySpeechTranscript(transcript)
+        }
+        speechRecognizer.onError = { [weak self] _ in
+            self?.isListening = false
+        }
+
+        Task {
+            guard await SpeechRecognizer.requestAuthorization() else { return }
+            guard phase == .idle, inputText.isEmpty else { return } // overlay may have closed already
+            do {
+                isListening = true
+                try speechRecognizer.startListening()
+            } catch {
+                isListening = false
+            }
+        }
+    }
+
+    func stopVoiceCapture() {
+        speechRecognizer.stopListening()
+        isListening = false
+        silenceTask?.cancel()
+        silenceTask = nil
+    }
+
+    /// Called by the view when `inputText` changes for a reason other than
+    /// `applySpeechTranscript` below — i.e. the user actually typed. Voice yields immediately.
+    func userDidType() {
+        guard isListening else { return }
+        stopVoiceCapture()
+    }
+
+    private func applySpeechTranscript(_ transcript: String) {
+        isApplyingSpeechUpdate = true
+        inputText = transcript
+        DispatchQueue.main.async { [weak self] in
+            self?.isApplyingSpeechUpdate = false
+        }
+
+        // Trailing-silence auto-submit (Docs/PLANNING.md §17): each new partial result resets
+        // the timer, so submission only fires ~700ms after speech actually stops.
+        silenceTask?.cancel()
+        silenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard let self, !Task.isCancelled else { return }
+            guard self.phase == .idle, !self.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            self.submit()
+        }
+    }
+
     func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, phase == .idle else { return }
 
+        stopVoiceCapture()
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
 
         Task {
@@ -89,6 +152,7 @@ final class OverlayViewModel {
     }
 
     func reset() {
+        stopVoiceCapture()
         inputText = ""
         phase = .idle
     }

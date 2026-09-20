@@ -46,6 +46,7 @@ final class OverlayWindowController {
         DispatchQueue.main.async { [weak self] in
             self?.viewModel.requestFocus()
         }
+        viewModel.startVoiceCapture()
     }
 
     func hide() {

@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// The `cmd/` overlay's content. Voice input (Docs/PLANNING.md §17) and the real multi-step
-/// executing checklist (§15, §42) come later — this wires text input and Enter-to-submit against
-/// `OverlayViewModel`'s stubbed agent so the interaction shell is proven before anything real
-/// runs behind it.
+/// The `cmd/` overlay's content. Voice and text share one field (Docs/PLANNING.md §6) — speech
+/// streams in live, and typing at any point silently takes over. The real multi-step executing
+/// checklist (§15, §42) is still a later upgrade to `statusLine` below.
 struct OverlayView: View {
     @Bindable var viewModel: OverlayViewModel
     @FocusState private var isFocused: Bool
@@ -21,12 +20,18 @@ struct OverlayView: View {
                     .focused($isFocused)
                     .disabled(viewModel.isBusy)
                     .onSubmit { viewModel.submit() }
+                    .onChange(of: viewModel.inputText) { _, _ in
+                        if !viewModel.isApplyingSpeechUpdate {
+                            viewModel.userDidType()
+                        }
+                    }
 
                 Spacer()
 
-                Image(systemName: "mic")
+                Image(systemName: viewModel.isListening ? "mic.fill" : "mic")
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(viewModel.isListening ? Color.red : Color.secondary)
+                    .symbolEffect(.pulse, isActive: viewModel.isListening)
             }
 
             statusLine
