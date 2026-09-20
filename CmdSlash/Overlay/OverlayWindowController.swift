@@ -29,9 +29,12 @@ final class OverlayWindowController {
         }
     }
 
+    /// Cmd+/'s behavior. NOT a show/hide toggle — while the overlay is already visible, pressing
+    /// it again starts a fresh listening turn for a new command rather than closing anything;
+    /// Escape (-> cancel() -> hide()) is the only thing that actually dismisses the overlay.
     func toggle() {
         if panel.isVisible {
-            hide()
+            viewModel.startNewCommand()
         } else {
             show()
         }
@@ -50,8 +53,14 @@ final class OverlayWindowController {
     }
 
     func hide() {
+        // Read this before reset() clears it: if the completed action itself changed the
+        // frontmost app (launched something, opened a URL/folder, revealed a file), restoring
+        // the pre-overlay app here would shove that newly-opened window straight back behind it.
+        let shouldRestoreFocus = !viewModel.lastActionActivatedAnotherApp
         panel.orderOut(nil)
-        previouslyFrontmostApp?.activate()
+        if shouldRestoreFocus {
+            previouslyFrontmostApp?.activate()
+        }
         previouslyFrontmostApp = nil
         viewModel.reset()
     }

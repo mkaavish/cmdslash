@@ -38,6 +38,13 @@ final class OverlayViewModel {
     /// Set while `phase` is `.awaitingConfirmation`. Must always be resumed exactly once — an
     /// unresumed continuation would leave `runningTask` permanently suspended, not just cancelled.
     private var confirmationContinuation: CheckedContinuation<Bool, Never>?
+    /// True when the just-completed action itself changed the frontmost app (launched an app,
+    /// opened a URL/folder, revealed a file in Finder). `OverlayWindowController.hide()` reads
+    /// this to decide whether restoring focus to the pre-overlay app is correct — for these
+    /// actions it isn't: the whole point was to bring something else to the front, and
+    /// unconditionally restoring the old frontmost app was shoving the newly-opened window
+    /// straight back behind it.
+    private(set) var lastActionActivatedAnotherApp = false
 
     /// Only `.executing` disables the text field. `.awaitingConfirmation` deliberately leaves it
     /// enabled so the TextField's own `onSubmit` keeps routing Enter through — disabling it risks
@@ -52,6 +59,21 @@ final class OverlayViewModel {
 
     func requestFocus() {
         focusToken += 1
+    }
+
+    /// Cmd+/ pressed while the overlay is already visible — restarts listening for a new command
+    /// rather than closing (Escape is the dedicated close action). Ignored mid-action: re-pressing
+    /// the hotkey shouldn't silently interrupt an in-flight tool call or a pending confirmation.
+    func startNewCommand() {
+        switch phase {
+        case .idle, .completed, .failed:
+            phase = .idle
+            inputText = ""
+            requestFocus()
+            startVoiceCapture()
+        case .executing, .awaitingConfirmation:
+            break
+        }
     }
 
     /// Called when the overlay becomes visible — voice starts immediately per Docs/PLANNING.md §6
@@ -86,8 +108,18 @@ final class OverlayViewModel {
     /// Called by the view when `inputText` changes for a reason other than
     /// `applySpeechTranscript` below — i.e. the user actually typed. Voice yields immediately.
     func userDidType() {
-        guard isListening else { return }
-        stopVoiceCapture()
+        if isListening {
+            stopVoiceCapture()
+        }
+        // Typing over a finished result starts a fresh command rather than being silently
+        // ignored (submit() only accepts phase == .idle) — the panel stays open after
+        // completion now, so this is how a second command gets going without dismissing first.
+        switch phase {
+        case .completed, .failed:
+            phase = .idle
+        case .idle, .executing, .awaitingConfirmation:
+            break
+        }
     }
 
     private func applySpeechTranscript(_ transcript: String) {
@@ -114,14 +146,15 @@ final class OverlayViewModel {
 
         stopVoiceCapture()
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
+        lastActionActivatedAnotherApp = false
 
+        // No auto-dismiss: the panel now stays open showing the result until the user explicitly
+        // dismisses (Escape) or toggles it (Cmd+/ again) — it was closing on its own before,
+        // which nobody asked it to do.
         runningTask = Task {
             await runFastPath(for: trimmed)
             guard !Task.isCancelled else { return }
-            try? await Task.sleep(for: .seconds(1.4))
-            guard !Task.isCancelled else { return }
-            reset()
-            onDismissRequested?()
+            inputText = ""
         }
     }
 
@@ -162,7 +195,11 @@ final class OverlayViewModel {
     }
 
     private func runFastPath(for text: String) async {
-        AccessibilityPermission.requestIfNeeded()
+        // No AccessibilityPermission.requestIfNeeded() here — nothing in the fast path actually
+        // consumes window title/selected text yet (ContextEngine degrades gracefully without the
+        // grant), so prompting for it on every command was asking for a permission before there
+        // was a real task that needed it. Request it at the point something genuinely depends on
+        // that data instead.
         let context = ContextEngine.captureSnapshot()
         ContextEngine.logForDebugging(context)
 
@@ -198,6 +235,7 @@ final class OverlayViewModel {
                 phase = .executing(step: "Opening \(name)...")
                 let result = try await OpenApplicationTool().execute(appName: name)
                 try Task.checkCancellation()
+                lastActionActivatedAnotherApp = true
                 phase = .completed(summary: "Opened \(result.launchedName)")
 
             case "open_url":
@@ -208,6 +246,7 @@ final class OverlayViewModel {
                 phase = .executing(step: "Opening \(urlString)...")
                 let url = try OpenURLTool().execute(urlString: urlString)
                 try Task.checkCancellation()
+                lastActionActivatedAnotherApp = true
                 phase = .completed(summary: "Opened \(url.absoluteString)")
 
             case "open_folder":
@@ -218,6 +257,7 @@ final class OverlayViewModel {
                 phase = .executing(step: "Opening \(name) folder...")
                 let url = try OpenFolderTool().execute(name: name)
                 try Task.checkCancellation()
+                lastActionActivatedAnotherApp = true
                 phase = .completed(summary: "Opened \(url.lastPathComponent)")
 
             case "find_file":
@@ -231,6 +271,7 @@ final class OverlayViewModel {
                 try Task.checkCancellation()
                 if let top = matches.first {
                     let suffix = matches.count > 1 ? " (+\(matches.count - 1) more)" : ""
+                    lastActionActivatedAnotherApp = true // revealed in Finder
                     phase = .completed(summary: "Found \(top.name)\(suffix)")
                 }
 
@@ -304,7 +345,9 @@ final class OverlayViewModel {
         confirmationContinuation = nil
         runningTask?.cancel()
         runningTask = nil
-        reset()
+        // reset() is NOT called here — onDismissRequested() below routes to
+        // OverlayWindowController.hide(), which must read lastActionActivatedAnotherApp before
+        // reset() clears it, so hide() owns calling reset() itself.
         onDismissRequested?()
     }
 
@@ -312,5 +355,6 @@ final class OverlayViewModel {
         stopVoiceCapture()
         inputText = ""
         phase = .idle
+        lastActionActivatedAnotherApp = false
     }
 }
