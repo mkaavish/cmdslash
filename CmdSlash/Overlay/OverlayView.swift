@@ -53,7 +53,6 @@ struct OverlayView: View {
                 .strokeBorder(Color.white.opacity(0.08))
         )
         .onChange(of: viewModel.focusToken) { _, _ in isFocused = true }
-        .onExitCommand { viewModel.cancel() }
     }
 
     @ViewBuilder

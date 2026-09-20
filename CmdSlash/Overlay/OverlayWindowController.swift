@@ -27,6 +27,9 @@ final class OverlayWindowController {
         viewModel.onDismissRequested = { [weak self] in
             self?.hide()
         }
+        panel.onEscape = { [weak self] in
+            self?.viewModel.cancel()
+        }
     }
 
     /// Cmd+/'s behavior. NOT a show/hide toggle — while the overlay is already visible, pressing

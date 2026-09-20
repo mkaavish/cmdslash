@@ -155,12 +155,18 @@ final class OverlayViewModel {
             await runFastPath(for: trimmed)
             guard !Task.isCancelled else { return }
             inputText = ""
+            // The text field was disabled (and lost keyboard focus) during .executing — without
+            // this, Enter/Escape land nowhere until the user clicks back into the field manually.
+            requestFocus()
         }
     }
 
     /// Suspends until the user confirms or denies (via `confirmPendingAction()` or `cancel()`).
     private func requireConfirmation(summary: String) async -> Bool {
         phase = .awaitingConfirmation(summary: summary)
+        // Same reasoning as above: re-focus now that the field is interactive again, so Enter
+        // (confirm) and Escape (deny) work immediately without a click first.
+        requestFocus()
         return await withCheckedContinuation { continuation in
             confirmationContinuation = continuation
         }
