@@ -29,6 +29,10 @@ final class OverlayViewModel {
     /// silently discards voice capture).
     private(set) var isApplyingSpeechUpdate = false
     private var silenceTask: Task<Void, Never>?
+    /// The in-flight fast-path task, if any. Cancel must genuinely interrupt this, not just hide
+    /// the panel (Docs/PLANNING.md §37, §38) — a tool call left running after the user cancels is
+    /// exactly the silent-failure-adjacent behavior the plan rules out.
+    private var runningTask: Task<Void, Never>?
 
     var isBusy: Bool {
         switch phase {
@@ -103,21 +107,28 @@ final class OverlayViewModel {
         stopVoiceCapture()
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
 
-        Task {
+        runningTask = Task {
             await runFastPath(for: trimmed)
+            guard !Task.isCancelled else { return }
             try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
             reset()
             onDismissRequested?()
         }
     }
 
     private func runFastPath(for text: String) async {
+        AccessibilityPermission.requestIfNeeded()
+        let context = ContextEngine.captureSnapshot()
+        ContextEngine.logForDebugging(context)
+
         do {
             let client = try AnthropicClient()
-            guard let call = try await client.classifyFastPathIntent(text) else {
+            guard let call = try await client.classifyFastPathIntent(text, context: context) else {
                 phase = .failed(message: "Not sure how to do that yet")
                 return
             }
+            try Task.checkCancellation()
 
             switch call.name {
             case "open_application":
@@ -127,6 +138,7 @@ final class OverlayViewModel {
                 }
                 phase = .executing(step: "Opening \(name)...")
                 let result = try await OpenApplicationTool().execute(appName: name)
+                try Task.checkCancellation()
                 phase = .completed(summary: "Opened \(result.launchedName)")
 
             case "open_url":
@@ -136,17 +148,34 @@ final class OverlayViewModel {
                 }
                 phase = .executing(step: "Opening \(urlString)...")
                 let url = try OpenURLTool().execute(urlString: urlString)
+                try Task.checkCancellation()
                 phase = .completed(summary: "Opened \(url.absoluteString)")
+
+            case "open_folder":
+                guard let name = call.input["name"] as? String else {
+                    phase = .failed(message: "Model returned a malformed open_folder call")
+                    return
+                }
+                phase = .executing(step: "Opening \(name) folder...")
+                let url = try OpenFolderTool().execute(name: name)
+                try Task.checkCancellation()
+                phase = .completed(summary: "Opened \(url.lastPathComponent)")
 
             default:
                 phase = .failed(message: "Unknown tool: \(call.name)")
             }
         } catch {
+            // A cancelled task can throw any error shape depending on where it was interrupted
+            // (CancellationError, URLError(.cancelled), ...) — Task.isCancelled is the reliable
+            // signal, not the error's concrete type. cancel() already reset the UI in that case.
+            guard !Task.isCancelled else { return }
             phase = .failed(message: error.localizedDescription)
         }
     }
 
     func cancel() {
+        runningTask?.cancel()
+        runningTask = nil
         reset()
         onDismissRequested?()
     }

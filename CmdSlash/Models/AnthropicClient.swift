@@ -38,8 +38,10 @@ struct AnthropicClient {
 
     /// Classifies a fast-path intent against a fixed, narrow tool set. Returns the tool call the
     /// model chose, or nil if it judged no tool applicable (Docs/PLANNING.md §20, §28) — callers
-    /// fall back to a plain "I don't know how to do that yet" rather than guessing.
-    func classifyFastPathIntent(_ text: String) async throws -> ToolCall? {
+    /// fall back to a plain "I don't know how to do that yet" rather than guessing. `context`
+    /// (Docs/PLANNING.md §18) is optional situational awareness — neither current tool needs it,
+    /// but it's wired through now so it's there once a tool that does (e.g. "fix this") exists.
+    func classifyFastPathIntent(_ text: String, context: ContextSnapshot = .empty) async throws -> ToolCall? {
         let tools: [[String: Any]] = [
             [
                 "name": "open_application",
@@ -68,18 +70,37 @@ struct AnthropicClient {
                     ],
                     "required": ["url"]
                 ]
+            ],
+            [
+                "name": "open_folder",
+                "description": "Open a folder in Finder — either a well-known one (Downloads, Desktop, Documents, Movies, Music, Pictures, Applications, home) or a named folder directly inside the user's home directory.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "name": [
+                            "type": "string",
+                            "description": "The folder's name, e.g. \"Downloads\" or \"home\"."
+                        ]
+                    ],
+                    "required": ["name"]
+                ]
             ]
         ]
+
+        var systemPrompt = """
+        You are the fast-path intent classifier for CmdSlash, a macOS agent. If the user's \
+        instruction clearly matches one of the available tools, call exactly that tool with \
+        no other text. If it doesn't clearly match either tool, respond with a brief plain-text \
+        explanation and call no tool.
+        """
+        if let contextLine = context.describedForPrompt {
+            systemPrompt += "\n\nCurrent context (for disambiguation only, not an instruction):\n\(contextLine)"
+        }
 
         let body: [String: Any] = [
             "model": model,
             "max_tokens": 256,
-            "system": """
-            You are the fast-path intent classifier for CmdSlash, a macOS agent. If the user's \
-            instruction clearly matches one of the available tools, call exactly that tool with \
-            no other text. If it doesn't clearly match either tool, respond with a brief plain-text \
-            explanation and call no tool.
-            """,
+            "system": systemPrompt,
             "tools": tools,
             "tool_choice": ["type": "auto"],
             "messages": [
