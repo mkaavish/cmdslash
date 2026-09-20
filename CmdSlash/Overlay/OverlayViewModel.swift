@@ -2,9 +2,8 @@ import Foundation
 import Observation
 
 /// Drives the overlay's visible state. `Phase` is a deliberately small stand-in for the real
-/// state machine in Docs/PLANNING.md §38 (IDLE/UNDERSTANDING/EXECUTING/VERIFYING/...) — this
-/// stub only proves the input → submit → visible-progress → complete plumbing works before any
-/// real model call or tool exists behind it.
+/// state machine in Docs/PLANNING.md §38 (IDLE/UNDERSTANDING/EXECUTING/VERIFYING/...) — enough
+/// to run the fast path end to end without building out replanning/permission-gating yet.
 @Observable
 @MainActor
 final class OverlayViewModel {
@@ -12,6 +11,7 @@ final class OverlayViewModel {
         case idle
         case executing(step: String)
         case completed(summary: String)
+        case failed(message: String)
     }
 
     var inputText: String = ""
@@ -23,7 +23,11 @@ final class OverlayViewModel {
     var onDismissRequested: (() -> Void)?
 
     var isBusy: Bool {
-        phase != .idle
+        switch phase {
+        case .idle: false
+        case .executing: true
+        case .completed, .failed: false // dismissing, not accepting new input
+        }
     }
 
     func requestFocus() {
@@ -32,18 +36,50 @@ final class OverlayViewModel {
 
     func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isBusy else { return }
+        guard !trimmed.isEmpty, phase == .idle else { return }
 
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
 
-        // TODO(Week 2): replace with real intent classification + tool execution
-        // (Docs/PLANNING.md §19-21). This stub only proves the UI plumbing end to end.
         Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            phase = .completed(summary: "Echo: \(trimmed)")
-            try? await Task.sleep(for: .seconds(1.1))
+            await runFastPath(for: trimmed)
+            try? await Task.sleep(for: .seconds(1.4))
             reset()
             onDismissRequested?()
+        }
+    }
+
+    private func runFastPath(for text: String) async {
+        do {
+            let client = try AnthropicClient()
+            guard let call = try await client.classifyFastPathIntent(text) else {
+                phase = .failed(message: "Not sure how to do that yet")
+                return
+            }
+
+            switch call.name {
+            case "open_application":
+                guard let name = call.input["name"] as? String else {
+                    phase = .failed(message: "Model returned a malformed open_application call")
+                    return
+                }
+                phase = .executing(step: "Opening \(name)...")
+                let result = try await OpenApplicationTool().execute(appName: name)
+                phase = .completed(summary: "Opened \(result.launchedName)")
+
+            case "open_url":
+                guard let urlString = call.input["url"] as? String else {
+                    phase = .failed(message: "Model returned a malformed open_url call")
+                    return
+                }
+                phase = .executing(step: "Opening \(urlString)...")
+                let url = try OpenURLTool().execute(urlString: urlString)
+                phase = .completed(summary: "Opened \(url.absoluteString)")
+
+            default:
+                phase = .failed(message: "Unknown tool: \(call.name)")
+            }
+        } catch {
+            phase = .failed(message: error.localizedDescription)
         }
     }
 

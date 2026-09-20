@@ -56,6 +56,9 @@ struct OverlayView: View {
         case .completed(let summary):
             Label(summary, systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
+        case .failed(let message):
+            Label(message, systemImage: "xmark.circle.fill")
+                .foregroundStyle(.red)
         }
     }
 }
