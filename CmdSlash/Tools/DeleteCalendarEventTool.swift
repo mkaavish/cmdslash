@@ -2,7 +2,7 @@ import EventKit
 
 /// The `delete_calendar_event` tool (Docs/PLANNING.md §21). Destructive, so it's classified
 /// high-risk (§30) and — just as importantly — refuses to guess: it only deletes when exactly one
-/// event matches the search, and reports back rather than picking one if the title is ambiguous.
+/// event matches the search, and reports back rather than picking one if the search is ambiguous.
 struct DeleteCalendarEventTool {
     struct Result {
         let deletedTitle: String
@@ -10,17 +10,20 @@ struct DeleteCalendarEventTool {
     }
 
     enum ToolError: Error, LocalizedError {
-        case noMatch(String)
-        case ambiguous(String, count: Int)
+        case noCriteria
+        case noMatch
+        case ambiguous(count: Int)
         case deleteFailed(String)
         case verificationFailed
 
         var errorDescription: String? {
             switch self {
-            case .noMatch(let title):
-                "No event found matching \"\(title)\"."
-            case .ambiguous(let title, let count):
-                "Found \(count) events matching \"\(title)\" — be more specific, e.g. include the date."
+            case .noCriteria:
+                "Need a title or an approximate time to find the event to delete."
+            case .noMatch:
+                "No matching event found."
+            case .ambiguous(let count):
+                "Found \(count) matching events — be more specific, e.g. include the exact title or time."
             case .deleteFailed(let reason):
                 "Couldn't delete the event: \(reason)"
             case .verificationFailed:
@@ -33,24 +36,40 @@ struct DeleteCalendarEventTool {
 
     /// Searches roughly two months back and forward — wide enough for "delete the lunch with sam
     /// thing" to find an event scheduled last week or next week, narrow enough to stay fast.
-    func execute(titleQuery: String, searchWindowDays: Int = 60) throws -> Result {
+    /// `titleQuery` and `aroundTime` are both optional but at least one must be provided; when
+    /// both are given, an event must match both to be considered.
+    func execute(titleQuery: String?, aroundTime: Date?, searchWindowDays: Int = 60) throws -> Result {
+        guard titleQuery?.isEmpty == false || aroundTime != nil else {
+            throw ToolError.noCriteria
+        }
+
         let now = Date()
         let start = Calendar.current.date(byAdding: .day, value: -searchWindowDays, to: now) ?? now
         let end = Calendar.current.date(byAdding: .day, value: searchWindowDays, to: now) ?? now
 
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        let matches = store.events(matching: predicate).filter {
-            $0.title?.localizedCaseInsensitiveContains(titleQuery) == true
+        var matches = store.events(matching: predicate)
+
+        if let titleQuery, !titleQuery.isEmpty {
+            matches = matches.filter { $0.title?.localizedCaseInsensitiveContains(titleQuery) == true }
+        }
+
+        if let aroundTime {
+            let tolerance: TimeInterval = 30 * 60 // 30 minutes either side
+            matches = matches.filter { event in
+                guard let eventStart = event.startDate else { return false }
+                return abs(eventStart.timeIntervalSince(aroundTime)) <= tolerance
+            }
         }
 
         guard !matches.isEmpty else {
-            throw ToolError.noMatch(titleQuery)
+            throw ToolError.noMatch
         }
         guard matches.count == 1, let event = matches.first else {
-            throw ToolError.ambiguous(titleQuery, count: matches.count)
+            throw ToolError.ambiguous(count: matches.count)
         }
 
-        let title = event.title ?? titleQuery
+        let title = event.title ?? titleQuery ?? "event"
         let eventStart = event.startDate ?? now
         let identifier = event.eventIdentifier
 

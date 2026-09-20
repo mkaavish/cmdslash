@@ -9,6 +9,13 @@ struct AnthropicClient {
         let input: [String: Any]
     }
 
+    /// Either the model picked a tool, or it's telling the caller why it couldn't — that
+    /// explanation is worth showing the user directly instead of a generic fallback message.
+    enum ClassificationResult {
+        case toolCall(ToolCall)
+        case explanation(String)
+    }
+
     enum ClientError: Error, LocalizedError {
         case httpError(Int, String)
         case invalidResponse
@@ -43,12 +50,10 @@ struct AnthropicClient {
         return "\(formatter.string(from: Date())) (\(TimeZone.current.identifier))"
     }
 
-    /// Classifies a fast-path intent against a fixed, narrow tool set. Returns the tool call the
-    /// model chose, or nil if it judged no tool applicable (Docs/PLANNING.md §20, §28) — callers
-    /// fall back to a plain "I don't know how to do that yet" rather than guessing. `context`
-    /// (Docs/PLANNING.md §18) is optional situational awareness — neither current tool needs it,
-    /// but it's wired through now so it's there once a tool that does (e.g. "fix this") exists.
-    func classifyFastPathIntent(_ text: String, context: ContextSnapshot = .empty) async throws -> ToolCall? {
+    /// Classifies a fast-path intent against a fixed, narrow tool set (Docs/PLANNING.md §20, §28).
+    /// `context` (§18) is optional situational awareness — most current tools don't need it, but
+    /// it's wired through now so it's there once a tool that does (e.g. "fix this") exists.
+    func classifyFastPathIntent(_ text: String, context: ContextSnapshot = .empty) async throws -> ClassificationResult {
         let tools: [[String: Any]] = [
             [
                 "name": "open_application",
@@ -140,13 +145,14 @@ struct AnthropicClient {
             ],
             [
                 "name": "delete_calendar_event",
-                "description": "Delete a calendar event by searching for it by title within roughly the last/next two months. Only deletes if exactly one matching event is found — if multiple or none match, it reports that instead of guessing.",
+                "description": "Delete a calendar event, identified by title and/or by roughly when it's scheduled. Resolve relative time references (\"5pm today\", \"tomorrow morning\") to an absolute ISO 8601 timestamp using the current date/time given in context. Provide at least one of title or around_time — both if the user gave both. Only deletes if exactly one matching event is found within roughly the last/next two months — if multiple or none match, it reports that instead of guessing.",
                 "input_schema": [
                     "type": "object",
                     "properties": [
-                        "title": ["type": "string", "description": "The event's title, or a distinctive substring of it."]
+                        "title": ["type": "string", "description": "The event's title, or a distinctive substring of it. Optional if around_time is enough to identify it."],
+                        "around_time": ["type": "string", "description": "ISO 8601 timestamp near when the event is scheduled, e.g. 2026-09-21T17:00:00-05:00. Optional if title is enough to identify it."]
                     ],
-                    "required": ["title"]
+                    "required": []
                 ]
             ]
         ]
@@ -202,9 +208,14 @@ struct AnthropicClient {
 
         for block in content where block["type"] as? String == "tool_use" {
             if let name = block["name"] as? String, let input = block["input"] as? [String: Any] {
-                return ToolCall(name: name, input: input)
+                return .toolCall(ToolCall(name: name, input: input))
             }
         }
-        return nil
+
+        let explanation = content
+            .compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return .explanation(explanation.isEmpty ? "Not sure how to do that yet" : explanation)
     }
 }

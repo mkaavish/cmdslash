@@ -188,8 +188,18 @@ final class OverlayViewModel {
             let startDisplay = (call.input["start"] as? String).flatMap(Self.friendlyDate) ?? "unknown time"
             return "Create \"\(title)\" at \(startDisplay)?"
         case "delete_calendar_event":
-            guard let title = call.input["title"] as? String else { return nil }
-            return "Delete event matching \"\(title)\"? This can't be undone."
+            let title = call.input["title"] as? String
+            let aroundDisplay = (call.input["around_time"] as? String).flatMap(Self.friendlyDate)
+            switch (title, aroundDisplay) {
+            case let (.some(title), .some(time)):
+                return "Delete \"\(title)\" around \(time)? This can't be undone."
+            case let (.some(title), nil):
+                return "Delete event matching \"\(title)\"? This can't be undone."
+            case let (nil, .some(time)):
+                return "Delete the event around \(time)? This can't be undone."
+            case (nil, nil):
+                return nil
+            }
         default:
             return "Proceed with \(call.name)?"
         }
@@ -214,11 +224,17 @@ final class OverlayViewModel {
 
         do {
             let client = try AnthropicClient()
-            guard let call = try await client.classifyFastPathIntent(text, context: context) else {
-                phase = .failed(message: "Not sure how to do that yet")
-                return
-            }
+            let classification = try await client.classifyFastPathIntent(text, context: context)
             try Task.checkCancellation()
+
+            let call: AnthropicClient.ToolCall
+            switch classification {
+            case .explanation(let message):
+                phase = .failed(message: message)
+                return
+            case .toolCall(let toolCall):
+                call = toolCall
+            }
 
             // Docs/PLANNING.md §30: risk is classified centrally, not by the tool itself, and
             // medium/high-risk actions require explicit confirmation before executing.
@@ -320,7 +336,9 @@ final class OverlayViewModel {
                 phase = .completed(summary: "Created \"\(result.title)\"")
 
             case "delete_calendar_event":
-                guard let titleQuery = call.input["title"] as? String else {
+                let titleQuery = call.input["title"] as? String
+                let aroundTime = (call.input["around_time"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
+                guard titleQuery?.isEmpty == false || aroundTime != nil else {
                     phase = .failed(message: "Model returned a malformed delete_calendar_event call")
                     return
                 }
@@ -332,8 +350,8 @@ final class OverlayViewModel {
                 }
                 try Task.checkCancellation()
 
-                phase = .executing(step: "Deleting \"\(titleQuery)\"...")
-                let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery)
+                phase = .executing(step: "Deleting event...")
+                let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery, aroundTime: aroundTime)
                 try Task.checkCancellation()
                 phase = .completed(summary: "Deleted \"\(result.deletedTitle)\"")
 
