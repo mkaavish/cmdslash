@@ -2,9 +2,9 @@ import Foundation
 import PDFKit
 
 /// The `read_file` tool (Docs/PLANNING.md §21). Extracts text from plain-text/code files and
-/// PDFs. Its output isn't meant for the current one-line status UI to display directly — it's
-/// meant to feed a later step (summarize, explain), which needs the real multi-step planner
-/// (§20, §29) that doesn't exist yet. For now this only proves the extraction primitive works.
+/// PDFs — this is the tool that actually sends file content to the model (as a tool_result in the
+/// agentic loop, §29), which makes it the real data-exfiltration point `SensitivePathGuard`
+/// (§34) exists to protect.
 struct ReadFileTool {
     struct Result {
         let path: String
@@ -36,6 +36,8 @@ struct ReadFileTool {
     ]
 
     func execute(path: String) throws -> Result {
+        try SensitivePathGuard.assertAllowed(path)
+
         let expandedPath = (path as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expandedPath) else {
             throw ToolError.fileNotFound(path)

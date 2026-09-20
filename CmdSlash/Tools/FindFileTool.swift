@@ -62,7 +62,10 @@ struct FindFileTool {
                     let modifiedAt = metadataItem.value(forAttribute: NSMetadataItemFSContentChangeDateKey) as? Date
                     return Match(path: path, name: name, modifiedAt: modifiedAt)
                 }
-                continuation.resume(returning: Array(results.prefix(5)))
+                // Filtered here, not just at read_file — credential-path matches shouldn't even
+                // surface as search results or get revealed in Finder (Docs/PLANNING.md §34).
+                let allowedResults = results.filter { !SensitivePathGuard.isBlocked($0.path) }
+                continuation.resume(returning: Array(allowedResults.prefix(5)))
             }
 
             DispatchQueue.main.async {
