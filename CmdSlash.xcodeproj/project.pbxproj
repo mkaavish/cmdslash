@@ -251,6 +251,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "CmdSlash creates calendar events you explicitly ask it to, and confirms with you before doing so.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "CmdSlash listens after you press Cmd+/ so you can speak an instruction instead of typing it.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "CmdSlash uses on-device speech recognition to turn what you say into text.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
@@ -281,6 +282,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "CmdSlash creates calendar events you explicitly ask it to, and confirms with you before doing so.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "CmdSlash listens after you press Cmd+/ so you can speak an instruction instead of typing it.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "CmdSlash uses on-device speech recognition to turn what you say into text.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";

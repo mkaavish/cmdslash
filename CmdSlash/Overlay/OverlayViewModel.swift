@@ -3,13 +3,15 @@ import Observation
 
 /// Drives the overlay's visible state. `Phase` is a deliberately small stand-in for the real
 /// state machine in Docs/PLANNING.md §38 (IDLE/UNDERSTANDING/EXECUTING/VERIFYING/...) — enough
-/// to run the fast path end to end without building out replanning/permission-gating yet.
+/// to run the fast path end to end, including a real medium-risk confirmation gate (§30), without
+/// building out full replanning yet.
 @Observable
 @MainActor
 final class OverlayViewModel {
     enum Phase: Equatable {
         case idle
         case executing(step: String)
+        case awaitingConfirmation(summary: String)
         case completed(summary: String)
         case failed(message: String)
     }
@@ -33,10 +35,16 @@ final class OverlayViewModel {
     /// the panel (Docs/PLANNING.md §37, §38) — a tool call left running after the user cancels is
     /// exactly the silent-failure-adjacent behavior the plan rules out.
     private var runningTask: Task<Void, Never>?
+    /// Set while `phase` is `.awaitingConfirmation`. Must always be resumed exactly once — an
+    /// unresumed continuation would leave `runningTask` permanently suspended, not just cancelled.
+    private var confirmationContinuation: CheckedContinuation<Bool, Never>?
 
+    /// Only `.executing` disables the text field. `.awaitingConfirmation` deliberately leaves it
+    /// enabled so the TextField's own `onSubmit` keeps routing Enter through — disabling it risks
+    /// Enter silently not firing at all while a confirmation is pending.
     var isBusy: Bool {
         switch phase {
-        case .idle: false
+        case .idle, .awaitingConfirmation: false
         case .executing: true
         case .completed, .failed: false // dismissing, not accepting new input
         }
@@ -117,6 +125,42 @@ final class OverlayViewModel {
         }
     }
 
+    /// Suspends until the user confirms or denies (via `confirmPendingAction()` or `cancel()`).
+    private func requireConfirmation(summary: String) async -> Bool {
+        phase = .awaitingConfirmation(summary: summary)
+        return await withCheckedContinuation { continuation in
+            confirmationContinuation = continuation
+        }
+    }
+
+    /// Enter, while `phase == .awaitingConfirmation`.
+    func confirmPendingAction() {
+        confirmationContinuation?.resume(returning: true)
+        confirmationContinuation = nil
+    }
+
+    private func confirmationSummary(for call: AnthropicClient.ToolCall) -> String? {
+        switch call.name {
+        case "create_calendar_event":
+            guard let title = call.input["title"] as? String else { return nil }
+            let startDisplay = (call.input["start"] as? String).flatMap(Self.friendlyDate) ?? "unknown time"
+            return "Create \"\(title)\" at \(startDisplay)?"
+        case "delete_calendar_event":
+            guard let title = call.input["title"] as? String else { return nil }
+            return "Delete event matching \"\(title)\"? This can't be undone."
+        default:
+            return "Proceed with \(call.name)?"
+        }
+    }
+
+    private static func friendlyDate(_ iso8601: String) -> String? {
+        guard let date = ISO8601DateFormatter().date(from: iso8601) else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
     private func runFastPath(for text: String) async {
         AccessibilityPermission.requestIfNeeded()
         let context = ContextEngine.captureSnapshot()
@@ -129,6 +173,21 @@ final class OverlayViewModel {
                 return
             }
             try Task.checkCancellation()
+
+            // Docs/PLANNING.md §30: risk is classified centrally, not by the tool itself, and
+            // medium/high-risk actions require explicit confirmation before executing.
+            if RiskClassifier.riskLevel(forTool: call.name) != .low {
+                guard let summary = confirmationSummary(for: call) else {
+                    phase = .failed(message: "Model returned a malformed \(call.name) call")
+                    return
+                }
+                let approved = await requireConfirmation(summary: summary)
+                guard !Task.isCancelled else { return }
+                guard approved else {
+                    phase = .failed(message: "Cancelled")
+                    return
+                }
+            }
 
             switch call.name {
             case "open_application":
@@ -185,6 +244,49 @@ final class OverlayViewModel {
                 try Task.checkCancellation()
                 phase = .completed(summary: "Read \(result.content.count) characters from \(result.fileName)")
 
+            case "create_calendar_event":
+                guard
+                    let title = call.input["title"] as? String,
+                    let startString = call.input["start"] as? String,
+                    let endString = call.input["end"] as? String,
+                    let start = ISO8601DateFormatter().date(from: startString),
+                    let end = ISO8601DateFormatter().date(from: endString)
+                else {
+                    phase = .failed(message: "Model returned a malformed create_calendar_event call")
+                    return
+                }
+                let notes = call.input["notes"] as? String
+
+                phase = .executing(step: "Requesting Calendar access...")
+                guard await CalendarAccess.requestFullAccess() else {
+                    phase = .failed(message: "Calendar access wasn't granted")
+                    return
+                }
+                try Task.checkCancellation()
+
+                phase = .executing(step: "Creating \"\(title)\"...")
+                let result = try CreateCalendarEventTool().execute(title: title, start: start, end: end, notes: notes)
+                try Task.checkCancellation()
+                phase = .completed(summary: "Created \"\(result.title)\"")
+
+            case "delete_calendar_event":
+                guard let titleQuery = call.input["title"] as? String else {
+                    phase = .failed(message: "Model returned a malformed delete_calendar_event call")
+                    return
+                }
+
+                phase = .executing(step: "Requesting Calendar access...")
+                guard await CalendarAccess.requestFullAccess() else {
+                    phase = .failed(message: "Calendar access wasn't granted")
+                    return
+                }
+                try Task.checkCancellation()
+
+                phase = .executing(step: "Deleting \"\(titleQuery)\"...")
+                let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery)
+                try Task.checkCancellation()
+                phase = .completed(summary: "Deleted \"\(result.deletedTitle)\"")
+
             default:
                 phase = .failed(message: "Unknown tool: \(call.name)")
             }
@@ -198,6 +300,8 @@ final class OverlayViewModel {
     }
 
     func cancel() {
+        confirmationContinuation?.resume(returning: false)
+        confirmationContinuation = nil
         runningTask?.cancel()
         runningTask = nil
         reset()

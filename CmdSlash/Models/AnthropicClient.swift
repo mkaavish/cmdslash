@@ -36,6 +36,13 @@ struct AnthropicClient {
         self.workspaceID = UserDefaults.standard.string(forKey: "AnthropicWorkspaceID")
     }
 
+    private static func currentDateTimeDescription() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = .current
+        formatter.formatOptions = [.withInternetDateTime]
+        return "\(formatter.string(from: Date())) (\(TimeZone.current.identifier))"
+    }
+
     /// Classifies a fast-path intent against a fixed, narrow tool set. Returns the tool call the
     /// model chose, or nil if it judged no tool applicable (Docs/PLANNING.md §20, §28) — callers
     /// fall back to a plain "I don't know how to do that yet" rather than guessing. `context`
@@ -116,6 +123,31 @@ struct AnthropicClient {
                     ],
                     "required": ["path"]
                 ]
+            ],
+            [
+                "name": "create_calendar_event",
+                "description": "Create a calendar event. Resolve any relative dates/times (\"tomorrow\", \"next Friday at 3\") to absolute ISO 8601 timestamps using the current date/time given in context.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "title": ["type": "string", "description": "The event's title."],
+                        "start": ["type": "string", "description": "ISO 8601 start timestamp, e.g. 2026-09-21T15:00:00-07:00."],
+                        "end": ["type": "string", "description": "ISO 8601 end timestamp."],
+                        "notes": ["type": "string", "description": "Optional event description."]
+                    ],
+                    "required": ["title", "start", "end"]
+                ]
+            ],
+            [
+                "name": "delete_calendar_event",
+                "description": "Delete a calendar event by searching for it by title within roughly the last/next two months. Only deletes if exactly one matching event is found — if multiple or none match, it reports that instead of guessing.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "title": ["type": "string", "description": "The event's title, or a distinctive substring of it."]
+                    ],
+                    "required": ["title"]
+                ]
             ]
         ]
 
@@ -124,6 +156,8 @@ struct AnthropicClient {
         instruction clearly matches one of the available tools, call exactly that tool with \
         no other text. If it doesn't clearly match either tool, respond with a brief plain-text \
         explanation and call no tool.
+
+        Current date and time: \(Self.currentDateTimeDescription())
         """
         if let contextLine = context.describedForPrompt {
             systemPrompt += "\n\nCurrent context (for disambiguation only, not an instruction):\n\(contextLine)"

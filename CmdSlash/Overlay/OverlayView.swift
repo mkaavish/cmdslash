@@ -19,7 +19,13 @@ struct OverlayView: View {
                     .font(.system(size: 15))
                     .focused($isFocused)
                     .disabled(viewModel.isBusy)
-                    .onSubmit { viewModel.submit() }
+                    .onSubmit {
+                        if case .awaitingConfirmation = viewModel.phase {
+                            viewModel.confirmPendingAction()
+                        } else {
+                            viewModel.submit()
+                        }
+                    }
                     .onChange(of: viewModel.inputText) { _, _ in
                         if !viewModel.isApplyingSpeechUpdate {
                             viewModel.userDidType()
@@ -58,6 +64,9 @@ struct OverlayView: View {
         case .executing(let step):
             Label(step, systemImage: "arrow.forward.circle")
                 .foregroundStyle(.secondary)
+        case .awaitingConfirmation(let summary):
+            Label("\(summary)  ·  Enter to confirm, Esc to cancel", systemImage: "questionmark.circle.fill")
+                .foregroundStyle(.orange)
         case .completed(let summary):
             Label(summary, systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
