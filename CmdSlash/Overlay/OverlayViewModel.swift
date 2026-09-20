@@ -130,10 +130,13 @@ final class OverlayViewModel {
         }
 
         // Trailing-silence auto-submit (Docs/PLANNING.md §17): each new partial result resets
-        // the timer, so submission only fires ~700ms after speech actually stops.
+        // the timer, so submission only fires after speech actually stops for this long. 700ms
+        // (the plan's initial suggestion) cut people off mid-thought on a breath or an "umm" —
+        // 2s is more forgiving for longer commands. Enter still submits immediately regardless,
+        // for anyone who wants to skip the wait once they're done talking.
         silenceTask?.cancel()
         silenceTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(700))
+            try? await Task.sleep(for: .seconds(2))
             guard let self, !Task.isCancelled else { return }
             guard self.phase == .idle, !self.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             self.submit()
