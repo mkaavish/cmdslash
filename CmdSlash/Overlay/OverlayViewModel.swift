@@ -2,9 +2,9 @@ import Foundation
 import Observation
 
 /// Drives the overlay's visible state. `Phase` is a deliberately small stand-in for the real
-/// state machine in Docs/PLANNING.md §38 (IDLE/UNDERSTANDING/EXECUTING/VERIFYING/...) — enough
-/// to run the fast path end to end, including a real medium-risk confirmation gate (§30), without
-/// building out full replanning yet.
+/// state machine in Docs/PLANNING.md §38 (IDLE/UNDERSTANDING/EXECUTING/VERIFYING/...) — enough to
+/// run both the single-shot fast path (§28) and a real multi-step agentic loop (§29) end to end,
+/// including a real medium/high-risk confirmation gate (§30) shared by both.
 @Observable
 @MainActor
 final class OverlayViewModel {
@@ -151,11 +151,10 @@ final class OverlayViewModel {
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
         lastActionActivatedAnotherApp = false
 
-        // No auto-dismiss: the panel now stays open showing the result until the user explicitly
-        // dismisses (Escape) or toggles it (Cmd+/ again) — it was closing on its own before,
-        // which nobody asked it to do.
+        // No auto-dismiss: the panel stays open showing the result until the user explicitly
+        // dismisses (Escape) or restarts (Cmd+/ again).
         runningTask = Task {
-            await runFastPath(for: trimmed)
+            await route(text: trimmed)
             guard !Task.isCancelled else { return }
             inputText = ""
             // The text field was disabled (and lost keyboard focus) during .executing — without
@@ -213,31 +212,39 @@ final class OverlayViewModel {
         return formatter.string(from: date)
     }
 
-    private func runFastPath(for text: String) async {
-        // No AccessibilityPermission.requestIfNeeded() here — nothing in the fast path actually
-        // consumes window title/selected text yet (ContextEngine degrades gracefully without the
-        // grant), so prompting for it on every command was asking for a permission before there
-        // was a real task that needed it. Request it at the point something genuinely depends on
-        // that data instead.
+    // MARK: - Routing (Docs/PLANNING.md §27-29)
+
+    /// Classifies once via the fast path; a plain tool call runs immediately, `plan_multi_step`
+    /// hands off to the agentic loop, and anything else shows the model's own explanation.
+    private func route(text: String) async {
         let context = ContextEngine.captureSnapshot()
         ContextEngine.logForDebugging(context)
 
+        let classification: AnthropicClient.ClassificationResult
         do {
             let client = try AnthropicClient()
-            let classification = try await client.classifyFastPathIntent(text, context: context)
-            try Task.checkCancellation()
+            classification = try await client.classifyFastPathIntent(text, context: context)
+        } catch {
+            guard !Task.isCancelled else { return }
+            phase = .failed(message: error.localizedDescription)
+            return
+        }
+        guard !Task.isCancelled else { return }
 
-            let call: AnthropicClient.ToolCall
-            switch classification {
-            case .explanation(let message):
-                phase = .failed(message: message)
-                return
-            case .toolCall(let toolCall):
-                call = toolCall
-            }
+        switch classification {
+        case .explanation(let message):
+            phase = .failed(message: message)
+        case .toolCall(let call) where call.name == "plan_multi_step":
+            let goal = (call.input["goal"] as? String) ?? text
+            await runAgenticPath(goal: goal, context: context)
+        case .toolCall(let call):
+            await runSingleTool(call)
+        }
+    }
 
-            // Docs/PLANNING.md §30: risk is classified centrally, not by the tool itself, and
-            // medium/high-risk actions require explicit confirmation before executing.
+    /// The fast path (§28): one tool call, confirmed if risky, executed, done.
+    private func runSingleTool(_ call: AnthropicClient.ToolCall) async {
+        do {
             if RiskClassifier.riskLevel(forTool: call.name) != .low {
                 guard let summary = confirmationSummary(for: call) else {
                     phase = .failed(message: "Model returned a malformed \(call.name) call")
@@ -251,120 +258,194 @@ final class OverlayViewModel {
                 }
             }
 
-            switch call.name {
-            case "open_application":
-                guard let name = call.input["name"] as? String else {
-                    phase = .failed(message: "Model returned a malformed open_application call")
-                    return
-                }
-                phase = .executing(step: "Opening \(name)...")
-                let result = try await OpenApplicationTool().execute(appName: name)
-                try Task.checkCancellation()
-                lastActionActivatedAnotherApp = true
-                phase = .completed(summary: "Opened \(result.launchedName)")
-
-            case "open_url":
-                guard let urlString = call.input["url"] as? String else {
-                    phase = .failed(message: "Model returned a malformed open_url call")
-                    return
-                }
-                phase = .executing(step: "Opening \(urlString)...")
-                let url = try OpenURLTool().execute(urlString: urlString)
-                try Task.checkCancellation()
-                lastActionActivatedAnotherApp = true
-                phase = .completed(summary: "Opened \(url.absoluteString)")
-
-            case "open_folder":
-                guard let name = call.input["name"] as? String else {
-                    phase = .failed(message: "Model returned a malformed open_folder call")
-                    return
-                }
-                phase = .executing(step: "Opening \(name) folder...")
-                let url = try OpenFolderTool().execute(name: name)
-                try Task.checkCancellation()
-                lastActionActivatedAnotherApp = true
-                phase = .completed(summary: "Opened \(url.lastPathComponent)")
-
-            case "find_file":
-                guard let query = call.input["query"] as? String else {
-                    phase = .failed(message: "Model returned a malformed find_file call")
-                    return
-                }
-                let kind = call.input["kind"] as? String
-                phase = .executing(step: "Searching for \(query)...")
-                let matches = try await FindFileTool().execute(query: query, kind: kind)
-                try Task.checkCancellation()
-                if let top = matches.first {
-                    let suffix = matches.count > 1 ? " (+\(matches.count - 1) more)" : ""
-                    lastActionActivatedAnotherApp = true // revealed in Finder
-                    phase = .completed(summary: "Found \(top.name)\(suffix)")
-                }
-
-            case "read_file":
-                guard let path = call.input["path"] as? String else {
-                    phase = .failed(message: "Model returned a malformed read_file call")
-                    return
-                }
-                phase = .executing(step: "Reading \(path)...")
-                let result = try ReadFileTool().execute(path: path)
-                try Task.checkCancellation()
-                phase = .completed(summary: "Read \(result.content.count) characters from \(result.fileName)")
-
-            case "create_calendar_event":
-                guard
-                    let title = call.input["title"] as? String,
-                    let startString = call.input["start"] as? String,
-                    let endString = call.input["end"] as? String,
-                    let start = ISO8601DateFormatter().date(from: startString),
-                    let end = ISO8601DateFormatter().date(from: endString)
-                else {
-                    phase = .failed(message: "Model returned a malformed create_calendar_event call")
-                    return
-                }
-                let notes = call.input["notes"] as? String
-
-                phase = .executing(step: "Requesting Calendar access...")
-                guard await CalendarAccess.requestFullAccess() else {
-                    phase = .failed(message: "Calendar access wasn't granted")
-                    return
-                }
-                try Task.checkCancellation()
-
-                phase = .executing(step: "Creating \"\(title)\"...")
-                let result = try CreateCalendarEventTool().execute(title: title, start: start, end: end, notes: notes)
-                try Task.checkCancellation()
-                phase = .completed(summary: "Created \"\(result.title)\"")
-
-            case "delete_calendar_event":
-                let titleQuery = call.input["title"] as? String
-                let aroundTime = (call.input["around_time"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
-                guard titleQuery?.isEmpty == false || aroundTime != nil else {
-                    phase = .failed(message: "Model returned a malformed delete_calendar_event call")
-                    return
-                }
-
-                phase = .executing(step: "Requesting Calendar access...")
-                guard await CalendarAccess.requestFullAccess() else {
-                    phase = .failed(message: "Calendar access wasn't granted")
-                    return
-                }
-                try Task.checkCancellation()
-
-                phase = .executing(step: "Deleting event...")
-                let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery, aroundTime: aroundTime)
-                try Task.checkCancellation()
-                phase = .completed(summary: "Deleted \"\(result.deletedTitle)\"")
-
-            default:
-                phase = .failed(message: "Unknown tool: \(call.name)")
-            }
+            let outcome = try await executeTool(call)
+            guard !Task.isCancelled else { return }
+            phase = .completed(summary: outcome.uiSummary)
         } catch {
-            // A cancelled task can throw any error shape depending on where it was interrupted
-            // (CancellationError, URLError(.cancelled), ...) — Task.isCancelled is the reliable
-            // signal, not the error's concrete type. cancel() already reset the UI in that case.
             guard !Task.isCancelled else { return }
             phase = .failed(message: error.localizedDescription)
         }
+    }
+
+    /// The agentic path (§20, §29): a real multi-turn loop — call a tool, observe the result,
+    /// decide the next step or finish — rather than an upfront plan. Each risky step is still
+    /// confirmed individually, same as the fast path. Capped at maxSteps so a confused loop fails
+    /// loudly instead of running forever.
+    private func runAgenticPath(goal: String, context: ContextSnapshot) async {
+        var messages: [[String: Any]] = [["role": "user", "content": goal]]
+        let maxSteps = 6
+
+        for _ in 1...maxSteps {
+            let turn: AnthropicClient.AgenticTurn
+            do {
+                let client = try AnthropicClient()
+                turn = try await client.sendAgenticTurn(messages: messages, context: context)
+            } catch {
+                guard !Task.isCancelled else { return }
+                phase = .failed(message: error.localizedDescription)
+                return
+            }
+            guard !Task.isCancelled else { return }
+
+            messages.append(["role": "assistant", "content": turn.assistantContent])
+
+            guard let toolUse = turn.toolUse, let toolUseID = turn.toolUseID else {
+                phase = .completed(summary: turn.finalText ?? "Done")
+                return
+            }
+
+            if RiskClassifier.riskLevel(forTool: toolUse.name) != .low {
+                guard let summary = confirmationSummary(for: toolUse) else {
+                    phase = .failed(message: "Model returned a malformed \(toolUse.name) call")
+                    return
+                }
+                let approved = await requireConfirmation(summary: summary)
+                guard !Task.isCancelled else { return }
+                guard approved else {
+                    phase = .failed(message: "Cancelled")
+                    return
+                }
+            }
+
+            do {
+                let outcome = try await executeTool(toolUse)
+                guard !Task.isCancelled else { return }
+                messages.append([
+                    "role": "user",
+                    "content": [["type": "tool_result", "tool_use_id": toolUseID, "content": outcome.modelFacingContent]]
+                ])
+            } catch {
+                guard !Task.isCancelled else { return }
+                // Fed back to the model as a tool_result rather than failing outright — real
+                // replanning (§37): the model gets to decide whether to try something else or
+                // explain to the user why it can't proceed, instead of the loop just giving up.
+                messages.append([
+                    "role": "user",
+                    "content": [[
+                        "type": "tool_result",
+                        "tool_use_id": toolUseID,
+                        "content": "Error: \(error.localizedDescription)",
+                        "is_error": true
+                    ]]
+                ])
+            }
+        }
+
+        phase = .failed(message: "Gave up after \(maxSteps) steps without finishing")
+    }
+
+    // MARK: - Tool dispatch (shared by both paths above)
+
+    private func executeTool(_ call: AnthropicClient.ToolCall) async throws -> ToolExecutionOutcome {
+        switch call.name {
+        case "open_application":
+            guard let name = call.input["name"] as? String else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Opening \(name)...")
+            let result = try await OpenApplicationTool().execute(appName: name)
+            lastActionActivatedAnotherApp = true
+            let summary = "Opened \(result.launchedName)"
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "open_url":
+            guard let urlString = call.input["url"] as? String else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Opening \(urlString)...")
+            let url = try OpenURLTool().execute(urlString: urlString)
+            lastActionActivatedAnotherApp = true
+            let summary = "Opened \(url.absoluteString)"
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "open_folder":
+            guard let name = call.input["name"] as? String else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Opening \(name) folder...")
+            let url = try OpenFolderTool().execute(name: name)
+            lastActionActivatedAnotherApp = true
+            let summary = "Opened \(url.lastPathComponent)"
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "find_file":
+            guard let query = call.input["query"] as? String else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            let kind = call.input["kind"] as? String
+            phase = .executing(step: "Searching for \(query)...")
+            let matches = try await FindFileTool().execute(query: query, kind: kind)
+            lastActionActivatedAnotherApp = true // revealed in Finder
+            guard let top = matches.first else {
+                throw FindFileTool.ToolError.noMatches(query)
+            }
+            let suffix = matches.count > 1 ? " (+\(matches.count - 1) more)" : ""
+            let modifiedDisplay = top.modifiedAt.map { " (modified \(Self.friendlyDateValue($0)))" } ?? ""
+            return ToolExecutionOutcome(
+                modelFacingContent: "Found \(matches.count) matching file(s). Best match: \(top.name) at \(top.path)\(modifiedDisplay).",
+                uiSummary: "Found \(top.name)\(suffix)"
+            )
+
+        case "read_file":
+            guard let path = call.input["path"] as? String else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Reading \(path)...")
+            let result = try ReadFileTool().execute(path: path)
+            return ToolExecutionOutcome(
+                modelFacingContent: "Contents of \(result.fileName)\(result.truncated ? " (truncated)" : ""):\n\n\(result.content)",
+                uiSummary: "Read \(result.content.count) characters from \(result.fileName)"
+            )
+
+        case "create_calendar_event":
+            guard
+                let title = call.input["title"] as? String,
+                let startString = call.input["start"] as? String,
+                let endString = call.input["end"] as? String,
+                let start = ISO8601DateFormatter().date(from: startString),
+                let end = ISO8601DateFormatter().date(from: endString)
+            else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            let notes = call.input["notes"] as? String
+
+            phase = .executing(step: "Requesting Calendar access...")
+            guard await CalendarAccess.requestFullAccess() else {
+                throw CalendarAccessDeniedError()
+            }
+
+            phase = .executing(step: "Creating \"\(title)\"...")
+            let result = try CreateCalendarEventTool().execute(title: title, start: start, end: end, notes: notes)
+            let summary = "Created \"\(result.title)\""
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "delete_calendar_event":
+            let titleQuery = call.input["title"] as? String
+            let aroundTime = (call.input["around_time"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
+            guard titleQuery?.isEmpty == false || aroundTime != nil else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+
+            phase = .executing(step: "Requesting Calendar access...")
+            guard await CalendarAccess.requestFullAccess() else {
+                throw CalendarAccessDeniedError()
+            }
+
+            phase = .executing(step: "Deleting event...")
+            let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery, aroundTime: aroundTime)
+            let summary = "Deleted \"\(result.deletedTitle)\""
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        default:
+            throw UnknownToolError(tool: call.name)
+        }
+    }
+
+    private static func friendlyDateValue(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     func cancel() {
