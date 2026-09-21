@@ -71,20 +71,28 @@ struct AnthropicClient {
     ]
 
     /// The Context Engine (§18) captures the frontmost app but on its own that's just a fact —
-    /// nothing told the model what to *do* with it, so "summarize this" or "how much does it
-    /// cost" with a browser frontmost still triggered a clarifying question instead of resolving
-    /// "this"/"it" to the current webpage. This appends that missing instruction whenever a known
-    /// browser is frontmost.
+    /// nothing told the model what to *do* with it, so requests about content ("summarize this",
+    /// "how much does it cost", "what's the latest blog post") with a browser frontmost still
+    /// triggered a clarifying question instead of defaulting to the current website. This appends
+    /// that missing instruction whenever a known browser is frontmost — and phrases the remaining
+    /// fallback narrowly (current site vs. something else) rather than an open-ended question,
+    /// since a scoped yes/no is faster to answer by voice or text than free-form clarification.
     private static func implicitScreenContextInstruction(for context: ContextSnapshot) -> String? {
         guard let appName = context.frontmostAppName, knownBrowserAppNames.contains(appName) else {
             return nil
         }
         return """
-        The user is currently looking at a webpage in \(appName). If their request refers to \
-        "this", "it", "the page", or otherwise doesn't name a specific subject (e.g. "summarize \
-        this", "how much does it cost", "what does this do"), assume they mean the current \
-        webpage and use browser_get_page_text (via plan_multi_step, since answering also needs \
-        interpreting that content) rather than asking what they're referring to.
+        The user is currently looking at a webpage in \(appName). Default to assuming any request \
+        about content, information, or "the latest X" relates to the website currently open — not \
+        just when it says "this"/"it", but whenever no other subject is explicitly named. This \
+        includes things that might be on a DIFFERENT page of the SAME site (e.g. "how much does \
+        it cost" when pricing isn't on the current page, "what's the latest blog post" when the \
+        current page isn't a blog) — call plan_multi_step and let the agentic loop explore the \
+        site via its extracted links rather than asking for clarification. Only ask for \
+        clarification if the request is genuinely unrelated to reading content at all, or \
+        explicitly names a different app, file, or website — and when you do, phrase it narrowly \
+        as: are they asking about the current page/site (name it), or something else (in which \
+        case ask them to say what)? Not an open-ended "what do you mean".
         """
     }
 
@@ -229,7 +237,7 @@ struct AnthropicClient {
 
     private static let planMultiStepToolDefinition: [String: Any] = [
         "name": "plan_multi_step",
-        "description": "Use this whenever the request needs the CONTENT a tool returns to be interpreted, summarized, explained, or analyzed — not just retrieved. This applies even if only one retrieval tool (read_file, browser_get_page_text, find_file) would be involved: none of those tools produce a summary or explanation themselves, they only return raw data, so turning that into an actual answer always needs a further reasoning step this fast path's single tool call cannot do. Also use this for requests needing multiple actions chained together (e.g. finding a file AND then acting on it). Do not use this for something a single action tool fully and literally satisfies with no further interpretation needed (e.g. \"open Spotify\", \"go to a URL\", \"create an event\").",
+        "description": "Use this whenever the request is a QUESTION needing an actual answer (what/how much/when/where/why/is/does/tell me about), needs the content a tool returns to be interpreted or summarized, or needs multiple actions chained together (e.g. finding a file AND then acting on it). Do not use this for a COMMAND a single action tool fully and literally satisfies with no further interpretation needed (e.g. \"open Spotify\", \"go to a URL\", \"create an event\", \"find my resume\").",
         "input_schema": [
             "type": "object",
             "properties": [
@@ -242,11 +250,27 @@ struct AnthropicClient {
         ]
     ]
 
+    /// Tools whose result on its own is never actually useful to the user — their fast-path
+    /// completion message would just be "Read N characters from X" or "Opened X", not an answer
+    /// to whatever they asked. browser_navigate is included here too, not just the obvious
+    /// content-retrieval tools: open_url already covers plain "go to X" via the system default
+    /// browser, so browser_navigate's real value is as a step within multi-step exploration
+    /// (following an extracted link to find something), not as a fast-path standalone action —
+    /// and despite repeated prompt tightening, the classifier kept reaching for it directly for
+    /// "what's the latest X" style requests, navigating without anything then reading the result.
+    /// Excluding these from the fast path's tool list entirely closes that off structurally:
+    /// routing through plan_multi_step becomes the only way to use them at all, so there's no
+    /// direct-call path left to misclassify into.
+    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate"]
+
     /// Classifies a fast-path intent (Docs/PLANNING.md §20, §28): either exactly one action tool,
     /// or a signal (`plan_multi_step`) that this needs the agentic loop instead, or — if neither
     /// fits — a plain-text explanation. `context` (§18) is optional situational awareness.
     func classifyFastPathIntent(_ text: String, context: ContextSnapshot = .empty) async throws -> ClassificationResult {
-        let tools = Self.actionToolDefinitions() + [Self.planMultiStepToolDefinition]
+        let tools = Self.actionToolDefinitions().filter {
+            guard let name = $0["name"] as? String else { return true }
+            return !Self.agenticOnlyToolNames.contains(name)
+        } + [Self.planMultiStepToolDefinition]
 
         var systemPrompt = """
         You are the fast-path intent classifier for CmdSlash, a macOS agent. You have exactly \
@@ -256,14 +280,23 @@ struct AnthropicClient {
         Call one action tool directly ONLY if that single call, with no further interpretation of \
         its result, fully satisfies the request (e.g. "open Spotify", "go to example.com").
 
+        A reliable test: is the request phrased as a COMMAND (open, go to, create, delete, find) \
+        or a QUESTION (what, how much, when, where, why, is/does/can, or any "tell me about X")? \
+        Commands are usually satisfied by one mechanical action. Questions need an actual ANSWER — \
+        and no action tool's completion message ("Opened X", "Found Y") is ever an answer to a \
+        question, only confirmation that a mechanical step happened. If the request is a question, \
+        route to plan_multi_step even if you can see a single tool that's topically related — \
+        calling that tool directly performs an action but never actually answers what was asked, \
+        which silently fails to deliver what the user wanted just as surely as an error would.
+
         Call plan_multi_step instead — even if only one action tool would end up being used — \
         whenever:
+        - the request is phrased as a question (see the test above), OR
         - the request needs multiple tools chained together, OR
-        - the request asks you to summarize, explain, analyze, answer a question about, or \
-        otherwise interpret what a tool's output contains. read_file, browser_get_page_text, and \
-        find_file only retrieve raw data; they do not summarize or explain anything themselves. \
-        Since you have no further turn to produce that summary yourself, calling one of them \
-        directly for a "summarize X" request would silently fail to deliver the summary at all.
+        - the request asks you to summarize, explain, analyze, or otherwise interpret what a \
+        tool's output contains. read_file, browser_get_page_text, and browser_navigate aren't \
+        even offered to you here for exactly this reason — they only make sense as steps within \
+        that further reasoning, never as a standalone answer.
 
         If the request doesn't clearly match anything, respond with a brief plain-text explanation \
         and call no tool.
@@ -312,6 +345,14 @@ struct AnthropicClient {
         final answer and call no tool. If a tool call fails, use the error message to decide how \
         to proceed (try something else, or explain why it can't be done) rather than repeating the \
         same failing call.
+
+        If the information you need isn't on the current page but browser_get_page_text's result \
+        includes a link that plausibly has it (e.g. a "Pricing" link when asked about cost), \
+        navigate there yourself with browser_navigate and check — don't stop to ask the user's \
+        permission first. Reading and navigating are not destructive, so this kind of low-risk \
+        exploration within the same site is expected of you, not something to hesitate over. Only \
+        stop and ask the user when you've genuinely run out of reasonable places to look, or the \
+        request needs information only they have.
 
         Current date and time: \(Self.currentDateTimeDescription())
         """

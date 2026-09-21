@@ -557,8 +557,10 @@ final class OverlayViewModel {
             phase = .executing(step: "Reading the page...")
             let result = try await BrowserGetPageTextTool().execute()
             let titleNote = result.title.isEmpty ? "" : " (\(result.title))"
+            let linksNote = result.links.isEmpty ? "" : "\n\nLinks on this page (use browser_navigate if what you need is on one of these instead):\n"
+                + result.links.map { "- \($0.text): \($0.href)" }.joined(separator: "\n")
             return ToolExecutionOutcome(
-                modelFacingContent: "Page at \(result.url)\(titleNote)\(result.truncated ? " (truncated)" : ""):\n\n\(result.text)",
+                modelFacingContent: "Page at \(result.url)\(titleNote)\(result.truncated ? " (truncated)" : ""):\n\n\(result.text)\(linksNote)",
                 uiSummary: "Read \(result.text.count) characters from \(result.title.isEmpty ? result.url : result.title)"
             )
 

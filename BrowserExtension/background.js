@@ -64,11 +64,28 @@ async function executeAction(action, params) {
     const tab = await getActiveTab();
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => ({
-        url: document.location.href,
-        title: document.title,
-        text: document.body ? document.body.innerText : "",
-      }),
+      func: () => {
+        // Links, not just visible text — without these the agent can see the WORD "Pricing" on
+        // the page but has no URL to actually navigate to if what it needs isn't on this page.
+        const seen = new Set();
+        const links = Array.from(document.querySelectorAll("a[href]"))
+          .map((a) => ({ text: a.innerText.trim().replace(/\s+/g, " "), href: a.href }))
+          .filter((l) => l.text.length > 0 && l.text.length < 60 && l.href.startsWith("http"))
+          .filter((l) => {
+            const key = l.href + "|" + l.text;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 40);
+
+        return {
+          url: document.location.href,
+          title: document.title,
+          text: document.body ? document.body.innerText : "",
+          links,
+        };
+      },
     });
     return result;
   }

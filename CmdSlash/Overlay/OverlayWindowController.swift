@@ -77,10 +77,17 @@ final class OverlayWindowController {
     }
 
     func hide() {
-        // Read this before reset() clears it: if the completed action itself changed the
-        // frontmost app (launched something, opened a URL/folder, revealed a file), restoring
-        // the pre-overlay app here would shove that newly-opened window straight back behind it.
-        let shouldRestoreFocus = !viewModel.lastActionActivatedAnotherApp
+        // Read these before reset() clears them. Only skip restoring focus when the session
+        // actually completed successfully AND that action changed the frontmost app — not merely
+        // because some earlier step in a session that ultimately failed/gave up happened to call
+        // browser_navigate. A failed session left with lastActionActivatedAnotherApp still set
+        // from an earlier step, if trusted here, would skip restoring focus to the pre-overlay
+        // app for no good reason: nothing later confirmed a new app was correctly left frontmost,
+        // so CmdSlash itself could end up staying frontmost — which then poisons the Context
+        // Engine's next capture (§18) with "CmdSlash" instead of whatever the user was using.
+        let sessionSucceeded: Bool
+        if case .completed = viewModel.phase { sessionSucceeded = true } else { sessionSucceeded = false }
+        let shouldRestoreFocus = !(sessionSucceeded && viewModel.lastActionActivatedAnotherApp)
         panel.orderOut(nil)
         if shouldRestoreFocus {
             previouslyFrontmostApp?.activate()
