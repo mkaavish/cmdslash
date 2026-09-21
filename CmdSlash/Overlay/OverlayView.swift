@@ -112,8 +112,7 @@ struct OverlayView: View {
                     .padding(.top, 3)
 
                 ScrollView {
-                    Text(text)
-                        .font(.system(size: 13))
+                    markdownContent(text)
                         .foregroundStyle(.primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -127,6 +126,82 @@ struct OverlayView: View {
 
     private static func isLong(_ text: String) -> Bool {
         text.count > 70 || text.contains("\n")
+    }
+
+    // MARK: - Markdown rendering
+
+    /// Model-generated summaries (agentic-path final answers, §29) come back with real Markdown —
+    /// headers, bullet/numbered lists, **bold**/*italic*. SwiftUI's `Text(AttributedString(markdown:))`
+    /// renders inline emphasis correctly but completely drops block-level structure (paragraph
+    /// breaks, list items) when the whole thing is shown through a single Text — it all runs
+    /// together as one wall of text. So this parses into blocks first and renders each on its own
+    /// line, with inline emphasis still handled per-block via AttributedString.
+    private enum MarkdownBlockKind {
+        case paragraph, header, listItem
+    }
+
+    private struct MarkdownBlock: Identifiable {
+        let id = UUID()
+        let kind: MarkdownBlockKind
+        let text: String
+    }
+
+    private static func markdownBlocks(_ text: String) -> [MarkdownBlock] {
+        var blocks: [MarkdownBlock] = []
+        var currentParagraph: [String] = []
+
+        func flushParagraph() {
+            guard !currentParagraph.isEmpty else { return }
+            blocks.append(MarkdownBlock(kind: .paragraph, text: currentParagraph.joined(separator: " ")))
+            currentParagraph = []
+        }
+
+        for rawLine in text.components(separatedBy: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty {
+                flushParagraph()
+            } else if line.hasPrefix("#") {
+                flushParagraph()
+                blocks.append(MarkdownBlock(kind: .header, text: line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)))
+            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                flushParagraph()
+                blocks.append(MarkdownBlock(kind: .listItem, text: String(line.dropFirst(2))))
+            } else if let range = line.range(of: #"^\d+\.\s+"#, options: .regularExpression) {
+                flushParagraph()
+                blocks.append(MarkdownBlock(kind: .listItem, text: String(line[range.upperBound...])))
+            } else {
+                currentParagraph.append(line)
+            }
+        }
+        flushParagraph()
+        return blocks
+    }
+
+    private static func attributedText(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+    }
+
+    @ViewBuilder
+    private func markdownContent(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Self.markdownBlocks(text)) { block in
+                switch block.kind {
+                case .header:
+                    Text(Self.attributedText(block.text))
+                        .font(.system(size: 13, weight: .semibold))
+                case .listItem:
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                        Text(Self.attributedText(block.text))
+                    }
+                    .font(.system(size: 13))
+                case .paragraph:
+                    Text(Self.attributedText(block.text))
+                        .font(.system(size: 13))
+                }
+            }
+        }
     }
 }
 
