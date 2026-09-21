@@ -465,19 +465,22 @@ final class OverlayViewModel {
             guard let urlString = call.input["url"] as? String else {
                 throw MalformedToolCallError(tool: call.name)
             }
+            let newWindow = (call.input["new_window"] as? Bool) ?? false
             phase = .executing(step: "Opening \(urlString)...")
             let summary: String
             // Already looking at a browser with the extension alive — update its current tab in
             // place instead of opening a new one, so a run of related requests (refining the same
-            // search, say) doesn't pile up tabs. Falls through to a fresh tab/window below when
-            // there's no browser in front, or the bridge isn't reachable right now.
-            if let appName = capturedScreenContext.frontmostAppName,
+            // search, say) doesn't pile up tabs. Skipped entirely for an explicit new-window
+            // request (that should never reuse the current tab), and falls through to a fresh
+            // tab/window below when there's no browser in front, or the bridge isn't reachable.
+            if !newWindow,
+               let appName = capturedScreenContext.frontmostAppName,
                AnthropicClient.knownBrowserAppNames.contains(appName),
                BrowserBridgeServer.shared.isExtensionConnected,
                let navigateResult = try? await BrowserNavigateTool().execute(urlString: urlString, timeout: 5) {
                 summary = "Opened \(navigateResult.finalURL)"
             } else {
-                let url = try OpenURLTool().execute(urlString: urlString)
+                let url = try OpenURLTool().execute(urlString: urlString, newWindow: newWindow)
                 summary = "Opened \(url.absoluteString)"
             }
             lastActionActivatedAnotherApp = true

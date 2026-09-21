@@ -126,6 +126,10 @@ struct AnthropicClient {
                         "url": [
                             "type": "string",
                             "description": "A fully-qualified URL, e.g. \"https://youtube.com\"."
+                        ],
+                        "new_window": [
+                            "type": "boolean",
+                            "description": "True only if the user explicitly asked for a new/separate window (not just a new tab). Leave false for an ordinary \"open X\" request — the default behavior already reuses the current browser tab when there is one, which is what most requests want."
                         ]
                     ],
                     "required": ["url"]
