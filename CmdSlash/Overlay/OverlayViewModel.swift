@@ -70,6 +70,11 @@ final class OverlayViewModel {
     /// unconditionally restoring the old frontmost app was shoving the newly-opened window
     /// straight back behind it.
     private(set) var lastActionActivatedAnotherApp = false
+    /// Docs/PLANNING.md §39 — a durable record of this session, separate from the in-memory
+    /// `phase` that resets on every dismiss. `sessionToolLog` accumulates one entry per tool call
+    /// made during the current session and is serialized into the session's row once it ends.
+    private var currentSessionID: String?
+    private var sessionToolLog: [[String: Any]] = []
 
     /// Only `.executing` disables the text field. `.awaitingConfirmation` deliberately leaves it
     /// enabled so the TextField's own `onSubmit` keeps routing Enter through — disabling it risks
@@ -172,6 +177,11 @@ final class OverlayViewModel {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, phase == .idle else { return }
 
+        let sessionID = UUID().uuidString
+        currentSessionID = sessionID
+        sessionToolLog = []
+        PersistenceStore.shared.beginSession(id: sessionID, inputMode: isListening ? "voice" : "text", rawText: trimmed)
+
         stopVoiceCapture()
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
         lastActionActivatedAnotherApp = false
@@ -181,6 +191,15 @@ final class OverlayViewModel {
         runningTask = Task {
             await route(text: trimmed)
             guard !Task.isCancelled else { return }
+
+            let (outcome, summary) = Self.outcomeDescription(for: phase)
+            PersistenceStore.shared.endSession(
+                id: sessionID,
+                outcome: outcome,
+                summary: summary,
+                toolCallsJSON: Self.jsonString(from: sessionToolLog)
+            )
+
             isApplyingProgrammaticTextUpdate = true
             inputText = ""
             DispatchQueue.main.async { [weak self] in
@@ -190,6 +209,26 @@ final class OverlayViewModel {
             // this, Enter/Escape land nowhere until the user clicks back into the field manually.
             requestFocus()
         }
+    }
+
+    private static func outcomeDescription(for phase: Phase) -> (outcome: String, summary: String?) {
+        switch phase {
+        case .completed(let summary): ("completed", summary)
+        case .failed(let message): ("failed", message)
+        case .idle, .executing, .awaitingConfirmation: ("unknown", nil)
+        }
+    }
+
+    private static func jsonString(from array: [[String: Any]]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: array) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func recordToolCall(_ call: AnthropicClient.ToolCall, resultSummary: String?, errorMessage: String?) {
+        var entry: [String: Any] = ["tool": call.name, "input": call.input]
+        if let resultSummary { entry["result"] = resultSummary }
+        if let errorMessage { entry["error"] = errorMessage }
+        sessionToolLog.append(entry)
     }
 
     /// Suspends until the user confirms or denies (via `confirmPendingAction()` or `cancel()`).
@@ -292,9 +331,11 @@ final class OverlayViewModel {
 
             let outcome = try await executeTool(call)
             guard !Task.isCancelled else { return }
+            recordToolCall(call, resultSummary: outcome.uiSummary, errorMessage: nil)
             phase = .completed(summary: outcome.uiSummary)
         } catch {
             guard !Task.isCancelled else { return }
+            recordToolCall(call, resultSummary: nil, errorMessage: error.localizedDescription)
             phase = .failed(message: error.localizedDescription)
         }
     }
@@ -342,12 +383,14 @@ final class OverlayViewModel {
             do {
                 let outcome = try await executeTool(toolUse)
                 guard !Task.isCancelled else { return }
+                recordToolCall(toolUse, resultSummary: outcome.uiSummary, errorMessage: nil)
                 messages.append([
                     "role": "user",
                     "content": [["type": "tool_result", "tool_use_id": toolUseID, "content": outcome.modelFacingContent]]
                 ])
             } catch {
                 guard !Task.isCancelled else { return }
+                recordToolCall(toolUse, resultSummary: nil, errorMessage: error.localizedDescription)
                 // Fed back to the model as a tool_result rather than failing outright — real
                 // replanning (§37): the model gets to decide whether to try something else or
                 // explain to the user why it can't proceed, instead of the loop just giving up.
@@ -501,6 +544,22 @@ final class OverlayViewModel {
         confirmationContinuation = nil
         runningTask?.cancel()
         runningTask = nil
+        if let sessionID = currentSessionID {
+            // Escape after a result has already landed (phase == .completed/.failed) is dismissal,
+            // not cancellation — there's nothing left to cancel. Recording that as "cancelled"
+            // would misrepresent a command that actually succeeded (or genuinely failed on its
+            // own) as if the user had aborted it mid-flight. Only .idle/.executing/
+            // .awaitingConfirmation at cancel-time reflect a real cancellation.
+            let (outcome, summary): (String, String?)
+            switch phase {
+            case .completed, .failed:
+                (outcome, summary) = Self.outcomeDescription(for: phase)
+            case .idle, .executing, .awaitingConfirmation:
+                (outcome, summary) = ("cancelled", nil)
+            }
+            PersistenceStore.shared.endSession(id: sessionID, outcome: outcome, summary: summary, toolCallsJSON: Self.jsonString(from: sessionToolLog))
+            currentSessionID = nil
+        }
         // reset() is NOT called here — onDismissRequested() below routes to
         // OverlayWindowController.hide(), which must read lastActionActivatedAnotherApp before
         // reset() clears it, so hide() owns calling reset() itself.
