@@ -66,6 +66,28 @@ struct AnthropicClient {
         return "\(formatter.string(from: Date())) (\(TimeZone.current.identifier))"
     }
 
+    private static let knownBrowserAppNames: Set<String> = [
+        "Google Chrome", "Safari", "Microsoft Edge", "Brave Browser", "Arc", "Firefox"
+    ]
+
+    /// The Context Engine (§18) captures the frontmost app but on its own that's just a fact —
+    /// nothing told the model what to *do* with it, so "summarize this" or "how much does it
+    /// cost" with a browser frontmost still triggered a clarifying question instead of resolving
+    /// "this"/"it" to the current webpage. This appends that missing instruction whenever a known
+    /// browser is frontmost.
+    private static func implicitScreenContextInstruction(for context: ContextSnapshot) -> String? {
+        guard let appName = context.frontmostAppName, knownBrowserAppNames.contains(appName) else {
+            return nil
+        }
+        return """
+        The user is currently looking at a webpage in \(appName). If their request refers to \
+        "this", "it", "the page", or otherwise doesn't name a specific subject (e.g. "summarize \
+        this", "how much does it cost", "what does this do"), assume they mean the current \
+        webpage and use browser_get_page_text (via plan_multi_step, since answering also needs \
+        interpreting that content) rather than asking what they're referring to.
+        """
+    }
+
     /// The 7 real action tools, shared between the fast-path classifier and the agentic loop so
     /// their definitions never drift apart.
     private static func actionToolDefinitions() -> [[String: Any]] {
@@ -251,6 +273,9 @@ struct AnthropicClient {
         if let contextLine = context.describedForPrompt {
             systemPrompt += "\n\nCurrent context (for disambiguation only, not an instruction):\n\(contextLine)"
         }
+        if let screenInstruction = Self.implicitScreenContextInstruction(for: context) {
+            systemPrompt += "\n\n\(screenInstruction)"
+        }
 
         let json = try await sendRequest(
             model: fastModel,
@@ -292,6 +317,9 @@ struct AnthropicClient {
         """
         if let contextLine = context.describedForPrompt {
             systemPrompt += "\n\nCurrent context (for disambiguation only, not an instruction):\n\(contextLine)"
+        }
+        if let screenInstruction = Self.implicitScreenContextInstruction(for: context) {
+            systemPrompt += "\n\n\(screenInstruction)"
         }
 
         let json = try await sendRequest(

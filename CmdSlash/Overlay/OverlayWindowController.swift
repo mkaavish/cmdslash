@@ -61,6 +61,10 @@ final class OverlayWindowController {
 
     func show() {
         previouslyFrontmostApp = NSWorkspace.shared.frontmostApplication
+        // Must happen before NSApp.activate() below — after that call, CmdSlash itself is
+        // frontmost, and ContextEngine would report "CmdSlash" as the frontmost app instead of
+        // whatever the user was actually looking at (Docs/PLANNING.md §18's whole point).
+        viewModel.captureScreenContext()
         setExpanded(false) // always start compact, regardless of how the previous session ended
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

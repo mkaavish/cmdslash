@@ -87,6 +87,20 @@ final class OverlayViewModel {
         }
     }
 
+    /// What the user was actually looking at when they invoked the overlay (Docs/PLANNING.md
+    /// §18) — captured once by `OverlayWindowController.show()` before it activates CmdSlash
+    /// itself (see that call site for why timing matters here), and reused for every command in
+    /// this overlay session, including follow-ups via `startNewCommand()`. Deliberately not
+    /// re-captured per command: the app/page the user had open when they first pressed Cmd+/
+    /// stays the natural referent for "this"/"it" through a whole back-and-forth, not just the
+    /// first question.
+    private var capturedScreenContext: ContextSnapshot = .empty
+
+    func captureScreenContext() {
+        capturedScreenContext = ContextEngine.captureSnapshot()
+        ContextEngine.logForDebugging(capturedScreenContext)
+    }
+
     func requestFocus() {
         focusToken += 1
     }
@@ -288,8 +302,10 @@ final class OverlayViewModel {
     /// Classifies once via the fast path; a plain tool call runs immediately, `plan_multi_step`
     /// hands off to the agentic loop, and anything else shows the model's own explanation.
     private func route(text: String) async {
-        let context = ContextEngine.captureSnapshot()
-        ContextEngine.logForDebugging(context)
+        // Captured earlier by OverlayWindowController.show(), before CmdSlash activated itself —
+        // capturing fresh here would see CmdSlash as the frontmost app instead of whatever the
+        // user was actually looking at.
+        let context = capturedScreenContext
 
         let classification: AnthropicClient.ClassificationResult
         do {
