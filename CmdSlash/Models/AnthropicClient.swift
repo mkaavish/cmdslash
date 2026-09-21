@@ -119,7 +119,7 @@ struct AnthropicClient {
             ],
             [
                 "name": "open_url",
-                "description": "Open a URL in the default web browser. If the request is to find/see/watch/look up something ON a well-known site (e.g. \"FIFA highlights on YouTube\", \"resume templates on Google\"), don't just open that site's bare homepage — construct its real search-results URL with the query embedded, e.g. https://www.youtube.com/results?search_query=FIFA+highlights or https://www.google.com/search?q=resume+templates, so the results are already showing rather than leaving the user to search themselves.",
+                "description": "Open a URL in the default web browser. If the request is to find/see/watch/listen-to something ON a well-known site or streaming platform (e.g. \"FIFA highlights on YouTube\", \"resume templates on Google\", \"some Kanye on Apple Music\", \"Kanye on Spotify\"), don't just launch that platform's bare app/homepage with open_application — construct its real search-results URL with the query embedded and open THAT with open_url instead, e.g. https://www.youtube.com/results?search_query=FIFA+highlights, https://www.google.com/search?q=resume+templates, https://music.apple.com/search?term=Kanye, or https://open.spotify.com/search/Kanye. For an installed native app (Music.app, Spotify), macOS opening that URL deep-links straight into the app's own search results, same as it would in a browser tab — so this works even when the request implies \"the app\", not literally \"the website\". Also use this (not open_application) for a request to open a SPECIFIC macOS System Settings pane (e.g. \"open accessibility settings\", \"open Wi-Fi settings\") — open_application's \"System Settings\" just launches the app to whatever pane it last had open, not the one asked for. Use the x-apple.systempreferences: URL scheme, e.g. x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility for Accessibility. If you're confident of the identifier for the pane asked about, construct it the same way; if not, it's fine to fall back to open_application with \"System Settings\" rather than guessing.",
                 "input_schema": [
                     "type": "object",
                     "properties": [
@@ -236,6 +236,20 @@ struct AnthropicClient {
                 "input_schema": [
                     "type": "object",
                     "properties": [:],
+                    "required": []
+                ]
+            ],
+            [
+                "name": "set_fullscreen",
+                "description": "Enter or exit fullscreen for the current frontmost window — e.g. a window just opened via open_url/open_application, or whatever window the user is currently looking at. Requires macOS Accessibility permission.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "enabled": [
+                            "type": "boolean",
+                            "description": "true for \"fullscreen\"/\"enter fullscreen\" (the default), false for \"exit fullscreen\"/\"leave fullscreen\"."
+                        ]
+                    ],
                     "required": []
                 ]
             ]

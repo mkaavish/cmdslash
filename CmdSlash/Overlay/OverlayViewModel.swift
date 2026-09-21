@@ -601,6 +601,13 @@ final class OverlayViewModel {
                 uiSummary: "Read \(result.text.count) characters from \(result.title.isEmpty ? result.url : result.title)"
             )
 
+        case "set_fullscreen":
+            let enabled = (call.input["enabled"] as? Bool) ?? true
+            phase = .executing(step: enabled ? "Entering fullscreen..." : "Exiting fullscreen...")
+            try FullscreenWindowTool().execute(enabled: enabled)
+            let summary = enabled ? "Entered fullscreen" : "Exited fullscreen"
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
         default:
             throw UnknownToolError(tool: call.name)
         }
