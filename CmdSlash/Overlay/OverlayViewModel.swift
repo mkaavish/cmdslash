@@ -101,6 +101,27 @@ final class OverlayViewModel {
         ContextEngine.logForDebugging(capturedScreenContext)
     }
 
+    /// Recent exchanges within this overlay session — without this, a clarifying question
+    /// CmdSlash just asked ("are you asking about the current webpage, or something else?") had
+    /// no way to actually be answered: the next submission ("yes") was classified as a fully
+    /// independent request with zero memory of what was just asked, since each submit() starts a
+    /// separate route() call. Capped and cleared per overlay session, same lifecycle as
+    /// capturedScreenContext above.
+    private var recentExchanges: [(userText: String, response: String)] = []
+    private static let maxRecentExchanges = 3
+
+    private func recordExchange(userText: String, response: String) {
+        recentExchanges.append((userText: userText, response: response))
+        if recentExchanges.count > Self.maxRecentExchanges {
+            recentExchanges.removeFirst(recentExchanges.count - Self.maxRecentExchanges)
+        }
+    }
+
+    private var conversationHistoryForPrompt: String? {
+        guard !recentExchanges.isEmpty else { return nil }
+        return recentExchanges.map { "User: \($0.userText)\nCmdSlash: \($0.response)" }.joined(separator: "\n\n")
+    }
+
     func requestFocus() {
         focusToken += 1
     }
@@ -207,6 +228,7 @@ final class OverlayViewModel {
             guard !Task.isCancelled else { return }
 
             let (outcome, summary) = Self.outcomeDescription(for: phase)
+            recordExchange(userText: trimmed, response: summary ?? outcome)
             PersistenceStore.shared.endSession(
                 id: sessionID,
                 outcome: outcome,
@@ -310,7 +332,7 @@ final class OverlayViewModel {
         let classification: AnthropicClient.ClassificationResult
         do {
             let client = try AnthropicClient()
-            classification = try await client.classifyFastPathIntent(text, context: context)
+            classification = try await client.classifyFastPathIntent(text, context: context, conversationHistory: conversationHistoryForPrompt)
         } catch {
             guard !Task.isCancelled else { return }
             phase = .failed(message: error.localizedDescription)
@@ -368,7 +390,7 @@ final class OverlayViewModel {
             let turn: AnthropicClient.AgenticTurn
             do {
                 let client = try AnthropicClient()
-                turn = try await client.sendAgenticTurn(messages: messages, context: context)
+                turn = try await client.sendAgenticTurn(messages: messages, context: context, conversationHistory: conversationHistoryForPrompt)
             } catch {
                 guard !Task.isCancelled else { return }
                 phase = .failed(message: error.localizedDescription)
@@ -444,9 +466,21 @@ final class OverlayViewModel {
                 throw MalformedToolCallError(tool: call.name)
             }
             phase = .executing(step: "Opening \(urlString)...")
-            let url = try OpenURLTool().execute(urlString: urlString)
+            let summary: String
+            // Already looking at a browser with the extension alive — update its current tab in
+            // place instead of opening a new one, so a run of related requests (refining the same
+            // search, say) doesn't pile up tabs. Falls through to a fresh tab/window below when
+            // there's no browser in front, or the bridge isn't reachable right now.
+            if let appName = capturedScreenContext.frontmostAppName,
+               AnthropicClient.knownBrowserAppNames.contains(appName),
+               BrowserBridgeServer.shared.isExtensionConnected,
+               let navigateResult = try? await BrowserNavigateTool().execute(urlString: urlString, timeout: 5) {
+                summary = "Opened \(navigateResult.finalURL)"
+            } else {
+                let url = try OpenURLTool().execute(urlString: urlString)
+                summary = "Opened \(url.absoluteString)"
+            }
             lastActionActivatedAnotherApp = true
-            let summary = "Opened \(url.absoluteString)"
             return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
 
         case "open_folder":
@@ -608,5 +642,6 @@ final class OverlayViewModel {
         inputText = ""
         phase = .idle
         lastActionActivatedAnotherApp = false
+        recentExchanges = []
     }
 }

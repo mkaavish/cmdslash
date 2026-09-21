@@ -66,7 +66,10 @@ struct AnthropicClient {
         return "\(formatter.string(from: Date())) (\(TimeZone.current.identifier))"
     }
 
-    private static let knownBrowserAppNames: Set<String> = [
+    /// Not private: OverlayViewModel also uses this to decide whether an open_url call should
+    /// update the frontmost browser's current tab (via the extension bridge) instead of opening a
+    /// new one, when the user is already looking at a browser.
+    static let knownBrowserAppNames: Set<String> = [
         "Google Chrome", "Safari", "Microsoft Edge", "Brave Browser", "Arc", "Firefox"
     ]
 
@@ -116,7 +119,7 @@ struct AnthropicClient {
             ],
             [
                 "name": "open_url",
-                "description": "Open a URL in the default web browser.",
+                "description": "Open a URL in the default web browser. If the request is to find/see/watch/look up something ON a well-known site (e.g. \"FIFA highlights on YouTube\", \"resume templates on Google\"), don't just open that site's bare homepage — construct its real search-results URL with the query embedded, e.g. https://www.youtube.com/results?search_query=FIFA+highlights or https://www.google.com/search?q=resume+templates, so the results are already showing rather than leaving the user to search themselves.",
                 "input_schema": [
                     "type": "object",
                     "properties": [
@@ -266,7 +269,11 @@ struct AnthropicClient {
     /// Classifies a fast-path intent (Docs/PLANNING.md §20, §28): either exactly one action tool,
     /// or a signal (`plan_multi_step`) that this needs the agentic loop instead, or — if neither
     /// fits — a plain-text explanation. `context` (§18) is optional situational awareness.
-    func classifyFastPathIntent(_ text: String, context: ContextSnapshot = .empty) async throws -> ClassificationResult {
+    /// `conversationHistory` (recent exchanges in this overlay session, if any) lets a clarifying
+    /// question CmdSlash just asked actually be answered — without it, "yes" or "the webpage" as
+    /// the next submission would be classified with zero memory of what was just asked, since
+    /// each submit() otherwise starts a fully independent request.
+    func classifyFastPathIntent(_ text: String, context: ContextSnapshot = .empty, conversationHistory: String? = nil) async throws -> ClassificationResult {
         let tools = Self.actionToolDefinitions().filter {
             guard let name = $0["name"] as? String else { return true }
             return !Self.agenticOnlyToolNames.contains(name)
@@ -313,6 +320,22 @@ struct AnthropicClient {
         if let screenInstruction = Self.implicitScreenContextInstruction(for: context) {
             systemPrompt += "\n\n\(screenInstruction)"
         }
+        if let conversationHistory, !conversationHistory.isEmpty {
+            systemPrompt += """
+
+
+            Recent exchanges earlier in this same session (most recent last). Read the current \
+            request as a continuation of this thread by default, not a fresh unrelated one — this \
+            covers two cases: (1) it's answering a clarifying question CmdSlash just asked, or (2) \
+            it's a short follow-up refining/narrowing what CmdSlash just did (e.g. after searching \
+            "FIFA highlights", a next request of just "2022" or "2018" means redo that same search \
+            with the year folded in — "FIFA highlights 2022" — not a request to clarify what "2022" \
+            means in isolation). A short, terse, or fragment-like request (a bare word, number, or \
+            phrase with no verb) is the strongest signal for case 2: interpret it by combining it \
+            with the most recent action rather than treating its brevity as ambiguity to ask about.
+            \(conversationHistory)
+            """
+        }
 
         let json = try await sendRequest(
             model: fastModel,
@@ -341,7 +364,7 @@ struct AnthropicClient {
     /// `assistantContent` plus the tool_result it produces before calling this again — this
     /// method itself is stateless per call, "never plans further than it can verify" one turn at
     /// a time rather than returning an upfront multi-step plan.
-    func sendAgenticTurn(messages: [[String: Any]], context: ContextSnapshot) async throws -> AgenticTurn {
+    func sendAgenticTurn(messages: [[String: Any]], context: ContextSnapshot, conversationHistory: String? = nil) async throws -> AgenticTurn {
         var systemPrompt = """
         You are CmdSlash's agent, working step by step toward the user's goal using the tools \
         available. Call exactly one tool per turn. After seeing each tool's result, decide the \
@@ -358,6 +381,16 @@ struct AnthropicClient {
         stop and ask the user when you've genuinely run out of reasonable places to look, or the \
         request needs information only they have.
 
+        When the goal is to find/show/search for videos, articles, or other content matching a \
+        description (as opposed to opening one specific, uniquely identified item), a single \
+        search whose results page comes back with real, topically relevant content already \
+        satisfies it — summarize what's showing and finish. Do not keep re-searching with refined \
+        or alternate queries trying to locate one exact matching result; search result pages are \
+        inherently approximate, and the user can refine further themselves if what's showing isn't \
+        quite right. Only search again if the page came back empty, clearly off-topic, or the user \
+        explicitly asked you to find one particular, uniquely identifiable item (e.g. "open the \
+        official trailer" or a specific URL/title they named).
+
         Current date and time: \(Self.currentDateTimeDescription())
         """
         if let contextLine = context.describedForPrompt {
@@ -365,6 +398,20 @@ struct AnthropicClient {
         }
         if let screenInstruction = Self.implicitScreenContextInstruction(for: context) {
             systemPrompt += "\n\n\(screenInstruction)"
+        }
+        if let conversationHistory, !conversationHistory.isEmpty {
+            systemPrompt += """
+
+
+            Recent exchanges earlier in this same session (most recent last). Treat the goal below \
+            as a continuation of this thread by default: it may be answering a clarifying question \
+            CmdSlash just asked, or a short follow-up refining/narrowing the last thing CmdSlash \
+            did (e.g. after searching "FIFA highlights", a next goal of just "2022" means redo that \
+            search with the year folded in — "FIFA highlights 2022" — not an unrelated new topic). \
+            A terse, fragment-like goal (a bare word/number/phrase) is the strongest signal it's a \
+            refinement of the most recent action, not something to ask about in isolation:
+            \(conversationHistory)
+            """
         }
 
         let json = try await sendRequest(

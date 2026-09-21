@@ -33,6 +33,16 @@ final class BrowserBridgeServer {
 
     private init() {}
 
+    /// Best-effort: true means the extension's background service worker is currently blocked in
+    /// a long-poll, i.e. it's alive and a command would be delivered to it near-instantly. False
+    /// doesn't strictly mean it's disconnected (it could just be between poll cycles), only that
+    /// there's nothing to hand a command to right this moment — callers use this to decide whether
+    /// a bridge round-trip is worth attempting at all rather than falling straight back to a
+    /// non-bridge alternative.
+    var isExtensionConnected: Bool {
+        queue.sync { pollWaiter != nil }
+    }
+
     func start() {
         guard listener == nil else { return }
         let parameters = NWParameters.tcp

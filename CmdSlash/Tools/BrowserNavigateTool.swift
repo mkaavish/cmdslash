@@ -9,8 +9,8 @@ struct BrowserNavigateTool {
         let finalURL: String
     }
 
-    func execute(urlString: String) async throws -> Result {
-        let response = try await BrowserBridgeServer.shared.sendCommand(action: "navigate", params: ["url": urlString])
+    func execute(urlString: String, timeout: TimeInterval = 15) async throws -> Result {
+        let response = try await BrowserBridgeServer.shared.sendCommand(action: "navigate", params: ["url": urlString], timeout: timeout)
         guard let finalURL = response["data"] as? String else {
             throw BrowserBridgeServer.BridgeError(message: "Extension didn't report the resulting URL.")
         }
