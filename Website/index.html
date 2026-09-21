@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cmd/ - a command layer for macOS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Questrial&display=swap">
+<style>
+:root{
+  --bg:#14151b;
+  --surface:#1d1f27;
+  --surface-2:#262933;
+  --border:#31333f;
+  --border-soft:#2a2c37;
+  --text:#f5f3ec;
+  --text-dim:#9ea3b3;
+  --text-faint:#82869a;
+  --accent:#aeb2bf;
+  --accent-soft:rgba(174,178,191,0.14);
+  --text-muted:#e3e1d8;
+  --good:#4ade80;
+  --warn:#fbbf24;
+  --danger:#f87171;
+  --radius-sm:6px;
+  --radius-md:10px;
+  --radius-lg:18px;
+  --font-display:'Instrument Sans',ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-display);-webkit-font-smoothing:antialiased;}
+html{scroll-behavior:smooth;}
+a{color:inherit;text-decoration:none;}
+h1,h2,h3{text-wrap:balance;margin:0;}
+p{margin:0;}
+[hidden]{display:none !important;}
+.container{max-width:1180px;margin-inline:auto;padding-inline:32px;}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+/* Liquid Glass: a web approximation (backdrop-filter + layered borders/highlights),
+   not Apple's native platform material. Nav is styled after the macOS menu bar's
+   vibrancy: mostly see-through, heavily blurred, a hairline separator, no drop shadow. */
+.nav{
+  position:sticky;top:0;z-index:20;
+  background:linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02)),rgba(20,21,27,0.38);
+  backdrop-filter:blur(28px) saturate(200%);
+  -webkit-backdrop-filter:blur(28px) saturate(200%);
+  border-bottom:1px solid rgba(255,255,255,0.10);
+}
+.nav-inner{max-width:1180px;margin-inline:auto;padding-inline:32px;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.nav-left{display:flex;align-items:center;gap:28px;}
+.wordmark{font-family:'Questrial',var(--font-display);font-size:1.3rem;font-weight:400;letter-spacing:-0.01em;white-space:nowrap;color:var(--text);}
+.wordmark .slash{color:var(--text);}
+.wordmark.small{font-size:1.2rem;}
+.nav-link{color:var(--text-dim);font-size:0.9rem;font-weight:500;transition:color 0.15s ease;background:none;border:none;cursor:pointer;font-family:var(--font-display);}
+.nav-link:hover{color:var(--text);}
+@media (max-width:640px){.nav-link{display:none;}}
+
+.btn{
+  position:relative;isolation:isolate;overflow:hidden;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font-family:var(--font-display);font-weight:600;
+  border-radius:999px;cursor:pointer;white-space:nowrap;border:none;
+  transition:transform 0.15s ease,box-shadow 0.15s ease,background 0.15s ease;
+}
+.btn-primary{
+  color:var(--bg);
+  background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(232,229,220,0.88));
+  backdrop-filter:blur(18px) saturate(180%);
+  -webkit-backdrop-filter:blur(18px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.95),inset 0 -6px 10px -6px rgba(0,0,0,0.10),0 10px 24px -10px rgba(0,0,0,0.55);
+}
+.btn-primary::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:radial-gradient(120% 140% at 25% -20%,rgba(255,255,255,0.95),transparent 55%);pointer-events:none;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.95),inset 0 -6px 10px -6px rgba(0,0,0,0.10),0 14px 30px -10px rgba(0,0,0,0.6);}
+.btn-primary:active{transform:translateY(1px) scale(0.98);box-shadow:inset 0 1px 0 rgba(255,255,255,0.9),0 4px 12px -6px rgba(0,0,0,0.5);}
+.btn-sm{padding:9px 18px;font-size:0.85rem;}
+.btn-lg{padding:14px 28px;font-size:1rem;}
+.btn-secondary{background:transparent;color:var(--text);border:1px solid var(--border);padding:12px 20px;font-size:0.92rem;}
+.btn-secondary:hover{border-color:rgba(255,255,255,0.3);background:var(--surface-2);}
+.btn-secondary:active{transform:translateY(1px) scale(0.98);}
+
+/* keycaps: shared by the hero demo and the "one shortcut" section */
+.keycap{min-width:52px;height:52px;padding:0 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.3rem;color:var(--text);box-shadow:0 2px 0 var(--border-soft),0 14px 28px -14px rgba(0,0,0,0.55);}
+.keycap-lg{min-width:88px;height:88px;border-radius:22px;font-size:2.3rem;}
+.keycap-sm{min-width:38px;height:38px;padding:0 10px;border-radius:11px;font-size:1rem;}
+.keycap-plus{color:var(--text-faint);font-size:1.05rem;}
+.keycap-plus-lg{font-size:1.5rem;}
+@keyframes keycapPress{
+  0%,100%{transform:translateY(0);box-shadow:0 2px 0 var(--border-soft),0 14px 28px -14px rgba(0,0,0,0.55);}
+  45%{transform:translateY(2px);box-shadow:0 0 0 var(--border-soft),0 8px 18px -12px rgba(0,0,0,0.55);}
+}
+.keycap.is-pressed{animation:keycapPress 0.3s ease;}
+
+.hero{padding-block:72px 64px;}
+.hero-inner{max-width:1180px;margin-inline:auto;padding-inline:32px;display:grid;grid-template-columns:1.05fr 0.95fr;gap:56px;align-items:center;}
+.hero-title{font-size:clamp(2.1rem,4.2vw,3.35rem);font-weight:600;line-height:1.1;letter-spacing:-0.02em;margin:0 0 20px;}
+.hero-lede{font-size:1.05rem;line-height:1.6;color:var(--text-dim);max-width:44ch;margin:0 0 14px;}
+.hero-lede kbd{font-family:var(--font-display);color:var(--text);}
+.hero-tagline{font-family:var(--font-mono);font-size:0.92rem;letter-spacing:0.03em;color:var(--text-faint);margin:0 0 30px;}
+
+.hero-visual{position:relative;display:flex;justify-content:center;}
+.hero-visual::before{content:"";position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(245,243,236,0.16),transparent 70%);top:-30px;left:8%;pointer-events:none;z-index:0;}
+.hero-visual::after{content:"";position:absolute;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(174,178,191,0.16),transparent 70%);bottom:-20px;right:6%;pointer-events:none;z-index:0;}
+.overlay-mock{position:relative;z-index:1;width:100%;max-width:420px;height:420px;display:flex;align-items:center;}
+.overlay-panel{
+  position:relative;isolation:isolate;overflow:hidden;
+  width:100%;border-radius:var(--radius-lg);padding:22px 22px 18px;
+  background:linear-gradient(135deg,rgba(255,255,255,0.14),rgba(255,255,255,0.03)),rgba(29,31,39,0.55);
+  backdrop-filter:blur(28px) saturate(180%) contrast(1.05);
+  -webkit-backdrop-filter:blur(28px) saturate(180%) contrast(1.05);
+  border:1px solid rgba(255,255,255,0.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22),inset 0 -1px 0 rgba(255,255,255,0.06),0 30px 60px -20px rgba(0,0,0,0.6);
+  opacity:1;transform:scale(1) translateY(0);
+  transition:opacity 0.28s ease, transform 0.28s ease;
+}
+.overlay-panel.is-fading-out{opacity:0;transform:scale(0.97) translateY(6px);}
+.overlay-panel.is-fading-in{opacity:0;transform:scale(0.97) translateY(-4px);}
+.overlay-panel::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:radial-gradient(circle at 20% 0%,rgba(255,255,255,0.30),transparent 42%);pointer-events:none;}
+.overlay-panel::after{content:"";position:absolute;inset:1px;border-radius:inherit;border:1px solid rgba(255,255,255,0.08);pointer-events:none;}
+.overlay-panel-idle{display:flex;align-items:center;justify-content:center;padding-block:44px;}
+.keycap-row{display:flex;align-items:center;justify-content:center;gap:12px;}
+.overlay-row{display:flex;align-items:center;gap:12px;color:var(--text-faint);}
+.overlay-input-text{font-family:var(--font-mono);font-size:0.92rem;color:var(--text);flex:1;line-height:1.4;}
+.caret{display:inline-block;width:2px;height:15px;background:var(--accent);margin-left:2px;vertical-align:-2px;animation:blink 1s steps(2) infinite;}
+@keyframes blink{50%{opacity:0;}}
+.overlay-prompt-echo{display:block;font-family:var(--font-mono);font-size:0.85rem;color:var(--text-dim);margin-bottom:16px;line-height:1.4;}
+.overlay-steps{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+.step{display:flex;align-items:center;gap:10px;font-size:0.88rem;}
+.step-icon{display:inline-flex;flex-shrink:0;}
+.overlay-steps .icon-active,.overlay-steps .icon-done{display:none;}
+.overlay-steps .step-active .icon-pending{display:none;}
+.overlay-steps .step-active .icon-active{display:inline-flex;}
+.overlay-steps .step-done .icon-pending{display:none;}
+.overlay-steps .step-done .icon-done{display:inline-flex;}
+.step-done .step-text{color:var(--text);}
+.step-done .step-icon.icon-done{color:var(--good);}
+.step-active .step-text{color:var(--text);}
+.step-active .step-icon.icon-active{color:var(--accent);}
+.step-pending .step-text{color:var(--text-faint);}
+.step-pending .step-icon.icon-pending{color:var(--text-faint);}
+.overlay-done{display:flex;align-items:center;gap:12px;padding:2px 0 4px;}
+.overlay-done .step-icon{color:var(--good);}
+.done-title{display:block;color:var(--text);font-size:0.92rem;font-weight:600;}
+.done-sub{display:block;color:var(--text-faint);font-size:0.78rem;margin-top:2px;}
+.overlay-controls{display:flex;gap:18px;padding-top:14px;border-top:1px solid var(--border-soft);margin-top:2px;}
+.overlay-control{font-size:0.8rem;color:var(--text-dim);}
+
+main section{padding-block:88px;}
+.section-title{font-size:clamp(1.5rem,2.6vw,2.05rem);font-weight:600;letter-spacing:-0.01em;margin:0 0 44px;max-width:26ch;}
+.section-title-tight{margin-bottom:14px;}
+.section-subtitle{color:var(--text-dim);font-size:1rem;line-height:1.6;max-width:52ch;margin:0 0 44px;}
+
+/* one shortcut */
+.shortcut{text-align:center;padding-block:68px 88px;}
+.shortcut .section-title{margin-inline:auto;max-width:22ch;margin-bottom:24px;}
+.shortcut-keys{display:flex;align-items:center;justify-content:center;gap:16px;margin:0 0 36px;}
+.shortcut-steps{display:flex;flex-direction:column;gap:10px;align-items:center;margin-bottom:36px;}
+.shortcut-steps p{font-family:var(--font-mono);font-size:1rem;color:var(--text-dim);}
+.shortcut-demo{display:flex;align-items:center;gap:12px;width:100%;max-width:520px;min-height:76px;margin-inline:auto;padding:16px 22px;border-radius:999px;background:var(--surface);border:1px solid var(--border);}
+.shortcut-demo svg{flex-shrink:0;color:var(--text-faint);}
+.rotating-prompt{font-family:var(--font-mono);font-size:0.92rem;color:var(--text);flex:1;text-align:left;transition:opacity 0.25s ease;}
+.rotating-prompt.is-fading{opacity:0;}
+
+/* workflows */
+.workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+.workflow-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;}
+.workflow-card-flagship{grid-column:1 / 4;background:linear-gradient(135deg,var(--accent-soft),transparent 60%),var(--surface);}
+.workflow-chain{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:0.8rem;color:var(--text-faint);margin-bottom:16px;}
+.chain-icon{display:inline-flex;color:var(--text-faint);}
+.sep{display:inline-flex;color:var(--text-faint);opacity:0.7;}
+.chain-verified{display:inline-flex;align-items:center;gap:6px;color:var(--good);}
+.workflow-prompt{font-family:var(--font-mono);font-size:0.98rem;line-height:1.5;color:var(--text);}
+
+/* not another chatbot */
+.chatbot{text-align:center;}
+.chatbot .section-title{margin-inline:auto;max-width:22ch;}
+.chatbot-lede{color:var(--text-dim);font-size:1.05rem;line-height:1.6;max-width:40ch;margin:14px auto 48px;}
+.flow-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:14px;margin-bottom:36px;}
+.flow-node{font-family:var(--font-mono);font-size:0.92rem;color:var(--text);padding:11px 18px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border);}
+.flow-node-key{font-family:var(--font-display);font-weight:600;}
+.flow-node-apps{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;background:none;border:none;padding:0;}
+.flow-node-done{color:var(--good);border-color:var(--good);}
+.flow-arrow{display:inline-flex;color:var(--text-faint);flex-shrink:0;}
+.chatbot-footnote{color:var(--text-faint);font-size:0.9rem;line-height:1.6;max-width:56ch;margin-inline:auto;}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.82rem;color:var(--text-dim);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;transition:border-color 0.4s ease,color 0.4s ease,box-shadow 0.4s ease;}
+.chip.is-lit{border-color:rgba(255,255,255,0.35);color:var(--text);box-shadow:0 0 0 1px rgba(255,255,255,0.10),0 8px 18px -10px rgba(0,0,0,0.5);}
+
+/* fast, trustworthy, native */
+.bento{display:grid;grid-template-columns:1.25fr 1fr;grid-template-rows:auto auto;gap:20px;}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:30px;}
+.tile-fast{grid-row:1 / 3;display:flex;flex-direction:column;justify-content:center;background:radial-gradient(120% 140% at 15% 0%,var(--accent-soft),transparent 55%),var(--surface);}
+.tile-trust{grid-column:2;grid-row:1;}
+.tile-native{grid-column:2;grid-row:2;}
+.tile-icon{color:var(--accent);margin-bottom:16px;display:inline-flex;}
+.tile h3{font-size:1.2rem;font-weight:600;margin:0 0 10px;}
+.tile p{color:var(--text-dim);font-size:0.95rem;line-height:1.6;}
+.fast-demo{margin-top:32px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;}
+.fast-demo-keys{display:flex;align-items:center;gap:10px;}
+.fast-demo-arrow{display:inline-flex;color:var(--text-faint);transform:rotate(90deg);margin-left:4px;}
+.fast-demo-result{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-family:var(--font-mono);font-size:0.85rem;color:var(--text-dim);}
+.fast-demo-dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(74,222,128,0.15);}
+.fast-demo-caption{color:var(--text-faint);font-size:0.85rem;margin-top:14px;max-width:32ch;}
+.mini-checklist{margin-top:18px;display:flex;flex-direction:column;gap:8px;}
+.mini-row{display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-dim);}
+.mini-row .step-icon{color:var(--good);}
+.mini-row.muted .step-icon{color:var(--text-faint);}
+.mini-menubar{margin-top:18px;}
+.menubar-bar{height:22px;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;padding-inline:10px;}
+.menubar-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);}
+.mini-caption{display:block;margin-top:8px;font-size:0.8rem;color:var(--text-faint);}
+
+/* trust / security */
+.trust-intro{color:var(--text-dim);font-size:1.05rem;line-height:1.7;max-width:56ch;margin:0 0 40px;}
+.trust-intro strong{color:var(--text);font-weight:600;}
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:40px;}
+.tier{background:var(--surface);border:1px solid var(--border);border-left-width:3px;border-radius:var(--radius-lg);padding:24px;}
+.tier-low{border-left-color:var(--good);}
+.tier-medium{border-left-color:var(--warn);}
+.tier-high{border-left-color:var(--danger);}
+.tier-label{display:block;font-weight:600;font-size:1rem;margin-bottom:10px;}
+.tier-examples{color:var(--text-dim);font-size:0.9rem;line-height:1.55;margin-bottom:12px;}
+.tier-confirm{color:var(--text-faint);font-size:0.85rem;}
+.trust-pillars{font-family:var(--font-mono);font-size:0.85rem;letter-spacing:0.02em;color:var(--text-faint);margin:0 0 14px;}
+.trust-footnote{color:var(--text-faint);font-size:0.88rem;line-height:1.6;max-width:60ch;}
+
+/* pricing */
+.pricing{text-align:center;}
+.pricing .section-title{margin-inline:auto;margin-bottom:12px;}
+.pricing .section-subtitle{margin-inline:auto;margin-bottom:36px;}
+.pricing-toggle-row{display:flex;justify-content:center;margin-bottom:40px;}
+.pricing-toggle{display:inline-flex;align-items:center;gap:2px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:4px;}
+.toggle-btn{border:none;background:transparent;color:var(--text-dim);font-family:var(--font-display);font-weight:600;font-size:0.85rem;padding:9px 18px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background 0.2s ease,color 0.2s ease;}
+.toggle-btn.is-active{background:var(--text);color:var(--bg);}
+.toggle-badge{margin-left:6px;font-size:0.75rem;opacity:0.7;}
+.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);align-items:start;gap:20px;text-align:left;margin-bottom:16px;}
+.plan-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:30px;}
+.plan-card-pro{border-color:rgba(255,255,255,0.16);background:linear-gradient(135deg,var(--accent-soft),transparent 55%),var(--surface);}
+.plan-label{font-family:var(--font-mono);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-faint);margin:0 0 12px;}
+.plan-name{font-size:1.15rem;font-weight:600;margin:0 0 8px;}
+.plan-position{color:var(--text-dim);font-size:0.9rem;line-height:1.5;min-height:2.7em;margin:0 0 22px;}
+.plan-price{display:flex;align-items:baseline;gap:8px;transition:opacity 0.2s ease,transform 0.2s ease;}
+.plan-price.is-fading{opacity:0;transform:translateY(3px);}
+.plan-price-amount{font-family:var(--font-mono);font-size:2rem;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;}
+.plan-price-period{color:var(--text-dim);font-size:0.9rem;}
+.plan-billing{display:flex;flex-direction:column;gap:4px;margin:8px 0 18px;transition:opacity 0.2s ease,transform 0.2s ease;}
+.plan-billing.is-fading{opacity:0;transform:translateY(3px);}
+.plan-billing-line{font-family:var(--font-display);font-size:0.88rem;color:var(--text-dim);}
+.plan-billing-renew{font-size:0.8rem;color:var(--text-faint);}
+.plan-features{list-style:none;margin:0 0 26px;padding:0;display:flex;flex-direction:column;gap:10px;}
+.plan-feature{display:flex;align-items:flex-start;gap:8px;font-size:0.87rem;color:var(--text-dim);line-height:1.45;}
+.plan-feature svg{flex-shrink:0;margin-top:2px;color:var(--text-faint);}
+.plan-card .btn{width:100%;padding:12px 20px;font-size:0.92rem;}
+.pricing-annual-note{font-family:var(--font-mono);font-size:0.85rem;color:var(--text-faint);text-align:center;min-height:1.4em;margin:0 0 48px;}
+.unlimited-demo{max-width:640px;margin:0 auto 48px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 26px;text-align:center;}
+.unlimited-heading{font-size:0.98rem;font-weight:600;color:var(--text);margin:0 0 16px;}
+.unlimited-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;text-align:left;}
+.unlimited-cmd{font-family:var(--font-mono);font-size:0.85rem;color:var(--text-dim);flex:1;min-width:200px;}
+.unlimited-tag{flex-shrink:0;font-family:var(--font-mono);font-size:0.72rem;color:var(--text-faint);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 10px;white-space:nowrap;}
+.unlimited-tag-good{color:var(--good);border-color:rgba(74,222,128,0.28);}
+.unlimited-divider{height:1px;background:var(--border-soft);margin:6px 0;}
+.pricing-value{color:var(--text-dim);font-size:0.95rem;margin:0 0 20px;}
+.pricing-compare{max-width:360px;margin:0 auto;display:flex;flex-direction:column;gap:8px;}
+.pricing-compare-row{display:flex;justify-content:space-between;gap:12px;font-family:var(--font-mono);font-size:0.85rem;color:var(--text);padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);}
+.pricing-compare-row-muted{color:var(--text-faint);background:transparent;border-color:var(--border-soft);}
+
+/* final cta */
+.cta{text-align:center;}
+.beta-tag{font-family:var(--font-mono);font-size:0.78rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-faint);margin:0 0 16px;}
+.cta .section-title{margin-inline:auto;}
+.cta-lede{color:var(--text-dim);font-size:1rem;max-width:48ch;margin:0 auto 34px;}
+.waitlist-form{max-width:440px;margin-inline:auto;}
+.field-group{display:flex;gap:10px;}
+.email-input{
+  flex:1;min-width:0;border-radius:999px;padding:13px 20px;
+  font-family:var(--font-display);font-size:0.95rem;color:var(--text);
+  background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02)),rgba(29,31,39,0.5);
+  backdrop-filter:blur(18px) saturate(180%);
+  -webkit-backdrop-filter:blur(18px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.10);
+}
+.email-input::placeholder{color:var(--text-dim);}
+.email-input:focus{outline:none;border-color:rgba(255,255,255,0.32);}
+.form-error{color:var(--danger);font-size:0.85rem;margin-top:10px;text-align:left;}
+.form-success{display:flex;flex-direction:column;align-items:center;gap:14px;}
+.form-success .step-icon{color:var(--good);}
+.form-success p{color:var(--text-dim);font-size:1rem;max-width:40ch;}
+
+.site-footer{padding-block:44px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
+.site-footer p{color:var(--text-faint);font-size:0.85rem;}
+
+@media (max-width:860px){
+  .hero-inner{grid-template-columns:1fr;gap:44px;padding-inline:20px;}
+  .hero-visual{order:-1;}
+  .bento{grid-template-columns:1fr;}
+  .tile-fast{grid-row:auto;}
+  .tile-trust{grid-column:auto;grid-row:auto;}
+  .tile-native{grid-column:auto;grid-row:auto;}
+  .workflow-grid{grid-template-columns:1fr;}
+  .workflow-card-flagship{grid-column:auto;}
+  .tiers{grid-template-columns:1fr;}
+  .plan-grid{grid-template-columns:1fr;}
+  .field-group{flex-direction:column;}
+  main section{padding-block:64px;}
+  .nav-inner{padding-inline:20px;}
+  .container{padding-inline:20px;}
+  .flow-row{flex-direction:column;}
+  .flow-arrow{transform:rotate(90deg);}
+}
+
+@media (max-width:480px){
+  .keycap-lg{min-width:64px;height:64px;border-radius:18px;font-size:1.7rem;}
+  .toggle-btn{padding:8px 14px;font-size:0.8rem;}
+  .toggle-badge{margin-left:4px;font-size:0.68rem;}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none !important;transition:none !important;}
+}
+
+@media (prefers-reduced-transparency: reduce){
+  .nav,.overlay-panel{background:var(--surface) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
+  .btn-primary{background:var(--text) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
+  .btn-primary::before{display:none;}
+  .email-input{background:var(--surface) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <div class="nav-left">
+      <span class="wordmark">cmd<span class="slash">/</span></span>
+      <a href="#pricing" class="nav-link nav-pricing-link">Pricing</a>
+    </div>
+    <a href="#waitlist" class="btn btn-primary btn-sm cta-scroll">Join the waitlist</a>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <h1 class="hero-title">Your Mac, on command.</h1>
+        <p class="hero-lede">Press <kbd>&#8984;</kbd> <kbd>/</kbd>. Say what you want. CmdSlash does the rest.</p>
+        <p class="hero-tagline">A native AI agent for your Mac.</p>
+        <a href="#waitlist" class="btn btn-primary btn-lg cta-scroll">Join the waitlist</a>
+      </div>
+      <div class="hero-visual">
+        <div class="overlay-mock">
+
+          <div class="overlay-panel overlay-panel-idle" id="panel-idle">
+            <div class="keycap-row">
+              <kbd class="keycap" id="keycapCmd">&#8984;</kbd>
+              <span class="keycap-plus">+</span>
+              <kbd class="keycap" id="keycapSlash">/</kbd>
+            </div>
+          </div>
+
+          <div class="overlay-panel" id="panel-listening" hidden>
+            <div class="overlay-row">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.6"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+              <span class="overlay-input-text">Take all my Canvas assignments and put them on my calendar.<span class="caret"></span></span>
+            </div>
+          </div>
+
+          <div class="overlay-panel" id="panel-executing" hidden>
+            <span class="overlay-prompt-echo">Take all my Canvas assignments and put them on my calendar.</span>
+            <div class="overlay-steps">
+              <div class="step step-pending" data-label="Opening Canvas" data-done="Opened Canvas">
+                <span class="step-icon icon-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"></circle></svg></span>
+                <span class="step-icon icon-active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-icon icon-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-text">Opening Canvas</span>
+              </div>
+              <div class="step step-pending" data-label="Reading assignments" data-done="Found 8 assignments">
+                <span class="step-icon icon-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"></circle></svg></span>
+                <span class="step-icon icon-active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-icon icon-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-text">Reading assignments</span>
+              </div>
+              <div class="step step-pending" data-label="Opening Calendar" data-done="Opened Calendar">
+                <span class="step-icon icon-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"></circle></svg></span>
+                <span class="step-icon icon-active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-icon icon-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-text">Opening Calendar</span>
+              </div>
+              <div class="step step-pending" data-label="Adding events" data-done="Added 8 events">
+                <span class="step-icon icon-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"></circle></svg></span>
+                <span class="step-icon icon-active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-icon icon-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-text">Adding events</span>
+              </div>
+              <div class="step step-pending" data-label="Verifying" data-done="Verified">
+                <span class="step-icon icon-pending"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"></circle></svg></span>
+                <span class="step-icon icon-active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-icon icon-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <span class="step-text">Verifying</span>
+              </div>
+            </div>
+            <div class="overlay-done" id="overlayDone" hidden>
+              <span class="step-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+              <span>
+                <span class="done-title">8 assignments added</span>
+                <span class="done-sub">Done</span>
+              </span>
+            </div>
+            <div class="overlay-controls" id="overlayControls">
+              <span class="overlay-control">Pause</span>
+              <span class="overlay-control">Cancel</span>
+              <span class="overlay-control">Take Over</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="shortcut">
+    <div class="container">
+      <h2 class="section-title">One shortcut.<br>Anything on your Mac.</h2>
+      <div class="shortcut-keys">
+        <kbd class="keycap keycap-lg">&#8984;</kbd>
+        <span class="keycap-plus keycap-plus-lg">+</span>
+        <kbd class="keycap keycap-lg">/</kbd>
+      </div>
+      <div class="shortcut-steps">
+        <p>Press &#8984; / from anywhere.</p>
+        <p>Speak or type what you want.</p>
+        <p>CmdSlash handles the rest.</p>
+      </div>
+      <div class="shortcut-demo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.6"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+        <span class="rotating-prompt" id="rotatingPrompt">&#8220;Find my latest project folder and open it in VS Code.&#8221;</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="workflows">
+    <div class="container">
+      <h2 class="section-title section-title-tight">Say it once. Watch it happen.</h2>
+      <p class="section-subtitle">One request can move across your apps, files, browser, terminal, and more. CmdSlash isn't limited to a single app.</p>
+      <div class="workflow-grid">
+        <div class="workflow-card">
+          <div class="workflow-chain">
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.4"></circle><path d="M3.5 12h17" stroke="currentColor" stroke-width="1.3"></path><path d="M12 3.5c2.6 2.3 2.6 15 0 17.2M12 3.5c-2.6 2.3-2.6 15 0 17.2" stroke="currentColor" stroke-width="1.3"></path></svg></span>
+            <span>Browser</span>
+          </div>
+          <p class="workflow-prompt">&#8220;Open YouTube and search for a recipe tutorial.&#8221;</p>
+        </div>
+        <div class="workflow-card">
+          <div class="workflow-chain">
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg></span>
+            <span>Filesystem</span>
+            <span class="sep"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.4"></rect><path d="M3 9h18" stroke="currentColor" stroke-width="1.4"></path></svg></span>
+            <span>VS Code</span>
+          </div>
+          <p class="workflow-prompt">&#8220;Find my latest project folder and open it in VS Code.&#8221;</p>
+        </div>
+        <div class="workflow-card">
+          <div class="workflow-chain">
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.4"></rect><path d="M7 9l3 3-3 3M13 15h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span>Terminal</span>
+            <span class="sep"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6 3 12l5 6M16 6l5 6-5 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span>Coding agent</span>
+          </div>
+          <p class="workflow-prompt">&#8220;Open my project and fix this error.&#8221;</p>
+        </div>
+        <div class="workflow-card workflow-card-flagship">
+          <div class="workflow-chain">
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.4"></circle><path d="M3.5 12h17" stroke="currentColor" stroke-width="1.3"></path><path d="M12 3.5c2.6 2.3 2.6 15 0 17.2M12 3.5c-2.6 2.3-2.6 15 0 17.2" stroke="currentColor" stroke-width="1.3"></path></svg></span>
+            <span>Browser</span>
+            <span class="sep"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span class="chain-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.4"></rect><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></span>
+            <span>Calendar</span>
+            <span class="sep"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span class="chain-verified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> verified per event</span>
+          </div>
+          <p class="workflow-prompt">&#8220;Take all my Canvas assignments and put them on my calendar.&#8221;</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="chatbot">
+    <div class="container">
+      <h2 class="section-title">Not another chatbot.</h2>
+      <p class="chatbot-lede">AI assistants tell you how. CmdSlash does it.</p>
+      <div class="flow-row">
+        <span class="flow-node">You</span>
+        <span class="flow-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <span class="flow-node flow-node-key">&#8984; /</span>
+        <span class="flow-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <span class="flow-node flow-node-key">CmdSlash</span>
+        <span class="flow-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <span class="flow-node flow-node-apps">
+          <span class="chip" id="chipBrowser">Browser</span><span class="chip" id="chipFiles">Files</span><span class="chip" id="chipCalendar">Calendar</span><span class="chip" id="chipTerminal">Terminal</span><span class="chip" id="chipApps">Apps</span>
+        </span>
+        <span class="flow-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <span class="flow-node flow-node-done">&#10003; Done</span>
+      </div>
+      <p class="chatbot-footnote">CmdSlash understands the request, chooses the right tools, performs the actions, and verifies the result.</p>
+    </div>
+  </section>
+
+  <section class="pillars">
+    <div class="container">
+      <h2 class="section-title">Fast, trustworthy, native.</h2>
+      <div class="bento">
+        <article class="tile tile-fast">
+          <div class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.12" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg></div>
+          <h3>Fast</h3>
+          <p>Designed to appear instantly and built for low-latency execution, so the overlay never gets in your way.</p>
+          <div class="fast-demo">
+            <div class="fast-demo-keys">
+              <kbd class="keycap keycap-sm">&#8984;</kbd>
+              <span class="keycap-plus">+</span>
+              <kbd class="keycap keycap-sm">/</kbd>
+            </div>
+            <span class="fast-demo-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <span class="fast-demo-result"><span class="fast-demo-dot"></span> Overlay ready</span>
+          </div>
+          <p class="fast-demo-caption">No spinner, no loading screen. It's just there.</p>
+        </article>
+        <article class="tile tile-trust">
+          <div class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+          <h3>Trustworthy</h3>
+          <p>Every action is built to verify itself, so nothing is marked done until CmdSlash checks that it actually happened.</p>
+          <div class="mini-checklist">
+            <div class="mini-row"><span class="step-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span> Opened Canvas</div>
+            <div class="mini-row"><span class="step-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span> Read assignments</div>
+            <div class="mini-row muted"><span class="step-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"></circle></svg></span> Verify events</div>
+          </div>
+        </article>
+        <article class="tile tile-native">
+          <div class="tile-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5"></rect><path d="M3 9h18" stroke="currentColor" stroke-width="1.5"></path><circle cx="6.5" cy="7" r="0.6" fill="currentColor"></circle><circle cx="8.5" cy="7" r="0.6" fill="currentColor"></circle></svg></div>
+          <h3>Native</h3>
+          <p>Built with Swift, AppKit, and the same system frameworks as macOS itself, not a browser window pretending to be an app.</p>
+          <div class="mini-menubar">
+            <div class="menubar-bar"><span class="menubar-dot"></span></div>
+            <span class="mini-caption">Menu bar only &middot; no dock icon</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="trust">
+    <div class="container">
+      <h2 class="section-title section-title-tight">Nothing happens without your say-so.</h2>
+      <p class="trust-intro"><strong>Safe actions happen quickly.</strong> <strong>Consequential actions ask first.</strong> <strong>Sensitive data stays protected.</strong> Everything else below is how that plays out.</p>
+      <div class="tiers">
+        <div class="tier tier-low">
+          <span class="tier-label">Low risk</span>
+          <p class="tier-examples">Open an app, read a file, search the web.</p>
+          <p class="tier-confirm">No confirmation needed.</p>
+        </div>
+        <div class="tier tier-medium">
+          <span class="tier-label">Medium risk</span>
+          <p class="tier-examples">Modify a file, create a calendar event, install a dependency.</p>
+          <p class="tier-confirm">One batched confirmation, not one per item.</p>
+        </div>
+        <div class="tier tier-high">
+          <span class="tier-label">High risk</span>
+          <p class="tier-examples">Delete files, send a message, run a destructive command.</p>
+          <p class="tier-confirm">Confirmed individually, every time, before it runs.</p>
+        </div>
+      </div>
+      <p class="trust-pillars">Local-first &middot; Explicit permissions &middot; Verified actions</p>
+      <p class="trust-footnote">CmdSlash is being built local-first, with on-device voice recognition by default. Distributed directly outside the Mac App Store, like other serious Mac automation tools.</p>
+    </div>
+  </section>
+
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <p class="beta-tag">Planned launch pricing</p>
+      <h2 class="section-title">Simple pricing.</h2>
+      <p class="section-subtitle">Start free. Upgrade when CmdSlash becomes part of your day.</p>
+
+      <div class="pricing-toggle-row">
+        <div class="pricing-toggle" role="group" aria-label="Billing period">
+          <button type="button" class="toggle-btn is-active" id="toggleMonthly" aria-pressed="true">Monthly</button>
+          <button type="button" class="toggle-btn" id="toggleAnnual" aria-pressed="false">Annual<span class="toggle-badge">Save 20%</span></button>
+        </div>
+      </div>
+
+      <div class="plan-grid">
+
+        <div class="plan-card" data-plan="free">
+          <h3 class="plan-name">Free</h3>
+          <p class="plan-position">Try CmdSlash and automate everyday Mac tasks.</p>
+          <div class="plan-price">
+            <span class="plan-price-amount">$0</span>
+            <span class="plan-price-period">Forever</span>
+          </div>
+          <div class="plan-billing" aria-hidden="true"></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> &#8984; / global shortcut</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Voice + text commands</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Open apps, files, folders, and URLs</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Basic Mac actions</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Limited AI agent usage</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Limited cross-app workflows</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Try advanced workflows</li>
+          </ul>
+          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Free">Join the waitlist</a>
+        </div>
+
+        <div class="plan-card" data-plan="student">
+          <p class="plan-label">Student pricing</p>
+          <h3 class="plan-name">Student</h3>
+          <p class="plan-position">Built for school, coding, and everything in between.</p>
+          <div class="plan-price">
+            <span class="plan-price-amount" id="studentAmount">$4.99</span>
+            <span class="plan-price-period" id="studentPeriod">/month</span>
+          </div>
+          <div class="plan-billing" id="studentBilling"></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Free</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Generous AI agent usage</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Cross-app workflows</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Coding agent</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Longer tasks</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Advanced AI models</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Canvas &#8594; Calendar workflows</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> File and document workflows</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Student-focused workflows</li>
+          </ul>
+          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Student">Get student access</a>
+        </div>
+
+        <div class="plan-card plan-card-pro" data-plan="pro">
+          <p class="plan-label">Most popular</p>
+          <h3 class="plan-name">Pro</h3>
+          <p class="plan-position">For people who want CmdSlash throughout their day.</p>
+          <div class="plan-price">
+            <span class="plan-price-amount" id="proAmount">$11.99</span>
+            <span class="plan-price-period" id="proPeriod">/month</span>
+          </div>
+          <div class="plan-billing" id="proBilling"></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Free</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Highest AI agent usage</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Full cross-app workflows</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Coding agent</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Advanced AI models</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Longer autonomous tasks</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Priority execution where applicable</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Full workflow capabilities</li>
+          </ul>
+          <a href="#waitlist" class="btn btn-primary cta-scroll" data-plan="Pro">Go Pro</a>
+        </div>
+
+      </div>
+
+      <p class="pricing-annual-note" id="pricingAnnualNote"></p>
+
+      <div class="unlimited-demo">
+        <p class="unlimited-heading">Unlimited commands. AI when you need it.</p>
+        <div class="unlimited-row">
+          <span class="unlimited-cmd">&#8984;/ Open Spotify</span>
+          <span class="unlimited-tag unlimited-tag-good">Unlimited</span>
+        </div>
+        <div class="unlimited-row">
+          <span class="unlimited-cmd">&#8984;/ Open Downloads</span>
+          <span class="unlimited-tag unlimited-tag-good">Unlimited</span>
+        </div>
+        <div class="unlimited-row">
+          <span class="unlimited-cmd">&#8984;/ Launch VS Code</span>
+          <span class="unlimited-tag unlimited-tag-good">Unlimited</span>
+        </div>
+        <div class="unlimited-divider"></div>
+        <div class="unlimited-row">
+          <span class="unlimited-cmd">&#8984;/ Find my project, fix this error, run the tests, and verify it works.</span>
+          <span class="unlimited-tag">AI agent workflow</span>
+        </div>
+      </div>
+
+      <p class="pricing-value">Priced below many premium AI tools.</p>
+      <div class="pricing-compare">
+        <div class="pricing-compare-row"><span>CmdSlash Pro</span><span>$11.99/mo</span></div>
+        <div class="pricing-compare-row pricing-compare-row-muted"><span>Many premium AI tools</span><span>$15-$20+/mo</span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="cta" id="waitlist">
+    <div class="container">
+      <p class="beta-tag">Private beta &middot; macOS</p>
+      <h2 class="section-title">Be one of the first to use CmdSlash.</h2>
+      <p class="cta-lede">We're inviting a small group of Mac users to test CmdSlash before launch.</p>
+
+      <form class="waitlist-form" id="waitlistForm">
+        <div class="field-group">
+          <label for="email" class="visually-hidden">Email address</label>
+          <input type="email" id="email" name="email" class="email-input" placeholder="you@gmail.com" required="required">
+          <input type="hidden" name="plan_interest" id="planInterest" value="">
+          <button type="submit" class="btn btn-primary">Join the waitlist &rarr;</button>
+        </div>
+        <p class="form-error" id="waitlistError" hidden></p>
+      </form>
+
+      <div class="form-success" id="waitlistSuccess" hidden>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <p>You're on the list. We'll reach out when a spot opens.</p>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <span class="wordmark small">cmd<span class="slash">/</span></span>
+  <p>A native macOS agent, in development.</p>
+</footer>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+
+  var reduced = false;
+  try {
+    reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) {}
+
+  /* CTA scroll-to-waitlist + focus (captures plan interest when present) */
+  var ctaLinks = document.querySelectorAll('.cta-scroll');
+  for (var i = 0; i < ctaLinks.length; i++) {
+    ctaLinks[i].addEventListener('click', function (e) {
+      e.preventDefault();
+      var plan = e.currentTarget.getAttribute('data-plan');
+      var planInput = $('planInterest');
+      if (plan && planInput) { planInput.value = plan; }
+      var target = $('waitlist');
+      if (target) {
+        target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+      }
+      setTimeout(function () {
+        var emailInput = $('email');
+        if (emailInput) { emailInput.focus(); }
+      }, reduced ? 0 : 550);
+    });
+  }
+
+  /* Pricing nav link: plain smooth scroll, no focus-stealing */
+  var pricingNavLink = document.querySelector('.nav-pricing-link');
+  if (pricingNavLink) {
+    pricingNavLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      var target = $('pricing');
+      if (target) {
+        target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+      }
+    });
+  }
+
+  /* Pricing: centralized config + Monthly/Annual toggle */
+  var PRICING = {
+    student: { monthly: 4.99, annualFirstYear: 35.99, annualRegular: 47.99 },
+    pro: { monthly: 11.99, annualFirstYear: 85.99, annualRegular: 114.99 }
+  };
+  var toggleMonthlyBtn = $('toggleMonthly');
+  var toggleAnnualBtn = $('toggleAnnual');
+  var annualNote = $('pricingAnnualNote');
+
+  function money(n) {
+    return '$' + n.toFixed(2);
+  }
+
+  function applyPricing(period) {
+    var isAnnual = period === 'annual';
+    ['student', 'pro'].forEach(function (key) {
+      var cfg = PRICING[key];
+      var amountEl = $(key + 'Amount');
+      var periodEl = $(key + 'Period');
+      var billingEl = $(key + 'Billing');
+      if (!amountEl) { return; }
+      if (isAnnual) {
+        amountEl.textContent = money(cfg.annualFirstYear);
+        periodEl.textContent = 'first year';
+        var perMonth = (cfg.annualFirstYear / 12).toFixed(2);
+        billingEl.innerHTML =
+          '<span class="plan-billing-line">≈ $' + perMonth + '/mo first year</span>' +
+          '<span class="plan-billing-line plan-billing-renew">Billed annually. Renews at ' + money(cfg.annualRegular) + '/year.</span>';
+      } else {
+        amountEl.textContent = money(cfg.monthly);
+        periodEl.textContent = '/month';
+        billingEl.innerHTML = '';
+      }
+    });
+    if (annualNote) {
+      annualNote.textContent = isAnnual ? '20% off annually · 3 months free first year' : '';
+    }
+  }
+
+  function setPricingPeriod(period, animate) {
+    var isAnnual = period === 'annual';
+    toggleMonthlyBtn.classList.toggle('is-active', !isAnnual);
+    toggleMonthlyBtn.setAttribute('aria-pressed', String(!isAnnual));
+    toggleAnnualBtn.classList.toggle('is-active', isAnnual);
+    toggleAnnualBtn.setAttribute('aria-pressed', String(isAnnual));
+
+    if (reduced || !animate) {
+      applyPricing(period);
+      return;
+    }
+    var fadeEls = document.querySelectorAll(
+      '.plan-card[data-plan="student"] .plan-price, .plan-card[data-plan="student"] .plan-billing,' +
+      '.plan-card[data-plan="pro"] .plan-price, .plan-card[data-plan="pro"] .plan-billing'
+    );
+    fadeEls.forEach(function (el) { el.classList.add('is-fading'); });
+    setTimeout(function () {
+      applyPricing(period);
+      fadeEls.forEach(function (el) { el.classList.remove('is-fading'); });
+    }, 180);
+  }
+
+  if (toggleMonthlyBtn && toggleAnnualBtn) {
+    applyPricing('monthly');
+    toggleMonthlyBtn.addEventListener('click', function () { setPricingPeriod('monthly', true); });
+    toggleAnnualBtn.addEventListener('click', function () { setPricingPeriod('annual', true); });
+  }
+
+  /* Hero product demo: idle keycaps -> listening -> executing -> done -> loop */
+  var idle = $('panel-idle');
+  var listening = $('panel-listening');
+  var executing = $('panel-executing');
+  var keycapCmd = $('keycapCmd');
+  var keycapSlash = $('keycapSlash');
+  var stepsEls = executing ? Array.prototype.slice.call(executing.querySelectorAll('.step')) : [];
+  var overlayDone = $('overlayDone');
+  var overlayControls = $('overlayControls');
+  var currentPanel = idle;
+
+  function setPhaseInstant(nextEl) {
+    idle.hidden = true;
+    listening.hidden = true;
+    executing.hidden = true;
+    nextEl.hidden = false;
+    currentPanel = nextEl;
+  }
+
+  function crossfadeTo(nextEl) {
+    if (nextEl === currentPanel) { return; }
+    var prev = currentPanel;
+    prev.classList.add('is-fading-out');
+    setTimeout(function () {
+      prev.hidden = true;
+      prev.classList.remove('is-fading-out');
+      nextEl.hidden = false;
+      nextEl.classList.add('is-fading-in');
+      void nextEl.offsetWidth;
+      nextEl.classList.remove('is-fading-in');
+      currentPanel = nextEl;
+    }, 300);
+  }
+
+  function setStepState(index, state) {
+    var el = stepsEls[index];
+    if (!el) { return; }
+    el.classList.remove('step-pending', 'step-active', 'step-done');
+    el.classList.add('step-' + state);
+    var textEl = el.querySelector('.step-text');
+    if (state === 'active') {
+      textEl.textContent = el.dataset.label + '…';
+    } else if (state === 'done') {
+      textEl.textContent = el.dataset.done;
+    } else {
+      textEl.textContent = el.dataset.label;
+    }
+  }
+
+  function resetExecuting() {
+    stepsEls.forEach(function (el, i) { setStepState(i, 'pending'); });
+    overlayDone.hidden = true;
+    overlayControls.hidden = false;
+  }
+
+  function pressKeycaps() {
+    [keycapCmd, keycapSlash].forEach(function (el, i) {
+      el.classList.remove('is-pressed');
+      void el.offsetWidth;
+      setTimeout(function () { el.classList.add('is-pressed'); }, i * 70);
+    });
+  }
+
+  function runSequence(steps) {
+    var i = 0;
+    function next() {
+      if (i >= steps.length) { return; }
+      var s = steps[i++];
+      s.run();
+      setTimeout(next, s.wait);
+    }
+    next();
+  }
+
+  function cycleDemo() {
+    runSequence([
+      { run: function () { crossfadeTo(idle); pressKeycaps(); }, wait: 1100 },
+      { run: function () { crossfadeTo(listening); }, wait: 2600 },
+      { run: function () { crossfadeTo(executing); resetExecuting(); setStepState(0, 'active'); }, wait: 850 },
+      { run: function () { setStepState(0, 'done'); setStepState(1, 'active'); }, wait: 850 },
+      { run: function () { setStepState(1, 'done'); setStepState(2, 'active'); }, wait: 850 },
+      { run: function () { setStepState(2, 'done'); setStepState(3, 'active'); }, wait: 850 },
+      { run: function () { setStepState(3, 'done'); setStepState(4, 'active'); }, wait: 850 },
+      { run: function () { setStepState(4, 'done'); overlayControls.hidden = true; overlayDone.hidden = false; }, wait: 2000 },
+      { run: function () { cycleDemo(); }, wait: 0 }
+    ]);
+  }
+
+  if (idle && listening && executing) {
+    if (reduced) {
+      setPhaseInstant(executing);
+      stepsEls.forEach(function (el, i) { setStepState(i, 'done'); });
+      overlayControls.hidden = true;
+      overlayDone.hidden = false;
+    } else {
+      cycleDemo();
+    }
+  }
+
+  /* One shortcut: rotating example prompts */
+  var promptEl = $('rotatingPrompt');
+  if (promptEl) {
+    var prompts = [
+      'Find my latest project folder and open it in VS Code.',
+      'Find the PDF I downloaded yesterday and summarize it.',
+      'Play my study playlist on Spotify.',
+      'Add everything due this week to my calendar.',
+      'Open YouTube and search for F1 highlights.'
+    ];
+    var pIndex = 0;
+    if (!reduced) {
+      setInterval(function () {
+        promptEl.classList.add('is-fading');
+        setTimeout(function () {
+          pIndex = (pIndex + 1) % prompts.length;
+          promptEl.textContent = '“' + prompts[pIndex] + '”';
+          promptEl.classList.remove('is-fading');
+        }, 260);
+      }, 2800);
+    }
+  }
+
+  /* Not another chatbot: cycle which tools light up */
+  var chipIds = ['chipBrowser', 'chipFiles', 'chipCalendar', 'chipTerminal', 'chipApps'];
+  var chipEls = chipIds.map($).filter(Boolean);
+  if (chipEls.length) {
+    var chipPaths = [['chipBrowser', 'chipCalendar'], ['chipFiles']];
+    var pathIndex = 0;
+    function lightPath(ids) {
+      chipEls.forEach(function (el) { el.classList.remove('is-lit'); });
+      ids.forEach(function (id) {
+        var el = $(id);
+        if (el) { el.classList.add('is-lit'); }
+      });
+    }
+    if (reduced) {
+      lightPath(chipPaths[0]);
+    } else {
+      lightPath(chipPaths[pathIndex]);
+      setInterval(function () {
+        pathIndex = (pathIndex + 1) % chipPaths.length;
+        lightPath(chipPaths[pathIndex]);
+      }, 2600);
+    }
+  }
+
+  /* Waitlist form */
+  var form = $('waitlistForm');
+  var errorEl = $('waitlistError');
+  var successEl = $('waitlistSuccess');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = form.elements['email'].value.trim();
+    var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(email)) {
+      errorEl.textContent = 'Enter a valid email address.';
+      errorEl.hidden = false;
+      return;
+    }
+    errorEl.hidden = true;
+    form.hidden = true;
+    successEl.hidden = false;
+  });
+})();
+</script>
+
+</body>
+</html>
