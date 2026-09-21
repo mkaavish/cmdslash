@@ -527,6 +527,25 @@ final class OverlayViewModel {
                 uiSummary: result.gitChangeSummary != nil ? "Claude Code made changes in \(repoName)" : "Claude Code ran but made no changes in \(repoName)"
             )
 
+        case "browser_navigate":
+            guard let urlString = call.input["url"] as? String else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Navigating to \(urlString)...")
+            let result = try await BrowserNavigateTool().execute(urlString: urlString)
+            lastActionActivatedAnotherApp = true // brings the browser forward
+            let summary = "Opened \(result.finalURL)"
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "browser_get_page_text":
+            phase = .executing(step: "Reading the page...")
+            let result = try await BrowserGetPageTextTool().execute()
+            let titleNote = result.title.isEmpty ? "" : " (\(result.title))"
+            return ToolExecutionOutcome(
+                modelFacingContent: "Page at \(result.url)\(titleNote)\(result.truncated ? " (truncated)" : ""):\n\n\(result.text)",
+                uiSummary: "Read \(result.text.count) characters from \(result.title.isEmpty ? result.url : result.title)"
+            )
+
         default:
             throw UnknownToolError(tool: call.name)
         }

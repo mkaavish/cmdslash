@@ -181,13 +181,33 @@ struct AnthropicClient {
                     ],
                     "required": ["task", "repo_path"]
                 ]
+            ],
+            [
+                "name": "browser_navigate",
+                "description": "Navigate the active browser tab to a URL. Requires the CmdSlash browser extension to be installed and Chrome to be open.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "url": ["type": "string", "description": "A fully-qualified URL, e.g. \"https://example.com\"."]
+                    ],
+                    "required": ["url"]
+                ]
+            ],
+            [
+                "name": "browser_get_page_text",
+                "description": "Retrieve the active browser tab's raw visible text — this only returns the text, it does not summarize or interpret it. Requires the CmdSlash browser extension to be installed and Chrome to be open.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [:],
+                    "required": []
+                ]
             ]
         ]
     }
 
     private static let planMultiStepToolDefinition: [String: Any] = [
         "name": "plan_multi_step",
-        "description": "Use this instead of any action tool when the request needs multiple actions chained together to fully complete — e.g. finding a file AND then summarizing it, or several separate steps. Do not use this for something a single action tool fully satisfies on its own.",
+        "description": "Use this whenever the request needs the CONTENT a tool returns to be interpreted, summarized, explained, or analyzed — not just retrieved. This applies even if only one retrieval tool (read_file, browser_get_page_text, find_file) would be involved: none of those tools produce a summary or explanation themselves, they only return raw data, so turning that into an actual answer always needs a further reasoning step this fast path's single tool call cannot do. Also use this for requests needing multiple actions chained together (e.g. finding a file AND then acting on it). Do not use this for something a single action tool fully and literally satisfies with no further interpretation needed (e.g. \"open Spotify\", \"go to a URL\", \"create an event\").",
         "input_schema": [
             "type": "object",
             "properties": [
@@ -207,11 +227,24 @@ struct AnthropicClient {
         let tools = Self.actionToolDefinitions() + [Self.planMultiStepToolDefinition]
 
         var systemPrompt = """
-        You are the fast-path intent classifier for CmdSlash, a macOS agent. If the user's \
-        instruction can be fully satisfied by exactly ONE of the action tools below, call exactly \
-        that tool with no other text. If completing it needs more than one tool chained together \
-        (e.g. finding a file AND then summarizing it), call plan_multi_step instead. If it doesn't \
-        clearly match anything, respond with a brief plain-text explanation and call no tool.
+        You are the fast-path intent classifier for CmdSlash, a macOS agent. You have exactly \
+        one turn: you either call one tool, or you don't — you never see that tool's result and \
+        never get to say anything else afterward. Keep that constraint in mind literally.
+
+        Call one action tool directly ONLY if that single call, with no further interpretation of \
+        its result, fully satisfies the request (e.g. "open Spotify", "go to example.com").
+
+        Call plan_multi_step instead — even if only one action tool would end up being used — \
+        whenever:
+        - the request needs multiple tools chained together, OR
+        - the request asks you to summarize, explain, analyze, answer a question about, or \
+        otherwise interpret what a tool's output contains. read_file, browser_get_page_text, and \
+        find_file only retrieve raw data; they do not summarize or explain anything themselves. \
+        Since you have no further turn to produce that summary yourself, calling one of them \
+        directly for a "summarize X" request would silently fail to deliver the summary at all.
+
+        If the request doesn't clearly match anything, respond with a brief plain-text explanation \
+        and call no tool.
 
         Current date and time: \(Self.currentDateTimeDescription())
         """

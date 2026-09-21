@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayController = OverlayWindowController()
         setupStatusItem()
         registerHotKey()
+        BrowserBridgeServer.shared.start()
     }
 
     private func setupStatusItem() {

@@ -1,0 +1,27 @@
+import Foundation
+
+/// The `browser_get_page_text` tool (Docs/PLANNING.md §21, §23). Reads the active tab's visible
+/// text via the extension's content script — structured DOM access rather than screenshotting the
+/// page and asking a vision model to read it, per the computer-control priority order (§22).
+struct BrowserGetPageTextTool {
+    struct Result {
+        let url: String
+        let title: String
+        let text: String
+        let truncated: Bool
+    }
+
+    private static let maxCharacters = 6000
+
+    func execute() async throws -> Result {
+        let response = try await BrowserBridgeServer.shared.sendCommand(action: "get_page_text", params: [:])
+        guard let data = response["data"] as? [String: Any], let fullText = data["text"] as? String else {
+            throw BrowserBridgeServer.BridgeError(message: "Extension didn't return page text.")
+        }
+        let url = (data["url"] as? String) ?? "unknown"
+        let title = (data["title"] as? String) ?? ""
+        let truncated = fullText.count > Self.maxCharacters
+        let text = truncated ? String(fullText.prefix(Self.maxCharacters)) : fullText
+        return Result(url: url, title: title, text: text, truncated: truncated)
+    }
+}
