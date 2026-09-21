@@ -14,6 +14,8 @@ enum RiskClassifier {
             .medium
         case "delete_calendar_event":
             .high
+        case "run_coding_agent":
+            .high
         default:
             .low
         }

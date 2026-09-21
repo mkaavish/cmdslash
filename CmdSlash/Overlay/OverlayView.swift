@@ -2,10 +2,11 @@ import SwiftUI
 
 /// The `cmd/` overlay's content. Voice and text share one field (Docs/PLANNING.md §6) — speech
 /// streams in live, and typing at any point silently takes over. Short results (most tool
-/// completions) stay on the compact one-line bar; long ones (agentic-path summaries, §29) expand
-/// into a scrollable text area — `onExpansionChange` tells `OverlayWindowController` which size
-/// the panel itself needs to be, since a SwiftUI view stretched to fill a fixed-size hosting view
-/// can't reliably report its own "natural" size back out (that's circular).
+/// completions) stay on the compact one-line bar; long ones (agentic-path summaries, §29, or a
+/// long high-risk confirmation, §30) expand into a scrollable text area — `onExpansionChange`
+/// tells `OverlayWindowController` which size the panel itself needs to be, since a SwiftUI view
+/// stretched to fill a fixed-size hosting view can't reliably report its own "natural" size back
+/// out (that's circular).
 struct OverlayView: View {
     @Bindable var viewModel: OverlayViewModel
     @FocusState private var isFocused: Bool
@@ -15,7 +16,8 @@ struct OverlayView: View {
         switch viewModel.phase {
         case .completed(let summary): Self.isLong(summary)
         case .failed(let message): Self.isLong(message)
-        case .idle, .executing, .awaitingConfirmation: false
+        case .awaitingConfirmation(let summary): Self.isLong(summary)
+        case .idle, .executing: false
         }
     }
 
@@ -76,11 +78,19 @@ struct OverlayView: View {
         case .executing(let step):
             compactLine(step, icon: "arrow.forward.circle", color: .secondary)
         case .awaitingConfirmation(let summary):
-            compactLine("\(summary)  ·  Enter to confirm, Esc to cancel", icon: "questionmark.circle.fill", color: .orange)
+            // isLong is decided on the raw summary alone, same value isExpanded above uses — the
+            // fixed "Enter to confirm..." hint appended below must not affect that decision, or
+            // this view and the panel-sizing decision could disagree about whether to expand.
+            resultArea(
+                "\(summary)  ·  Enter to confirm, Esc to cancel",
+                icon: "questionmark.circle.fill",
+                color: .orange,
+                isLong: Self.isLong(summary)
+            )
         case .completed(let summary):
-            resultArea(summary, icon: "checkmark.circle.fill", color: .green)
+            resultArea(summary, icon: "checkmark.circle.fill", color: .green, isLong: Self.isLong(summary))
         case .failed(let message):
-            resultArea(message, icon: "xmark.circle.fill", color: .red)
+            resultArea(message, icon: "xmark.circle.fill", color: .red, isLong: Self.isLong(message))
         }
     }
 
@@ -93,8 +103,8 @@ struct OverlayView: View {
     }
 
     @ViewBuilder
-    private func resultArea(_ text: String, icon: String, color: Color) -> some View {
-        if Self.isLong(text) {
+    private func resultArea(_ text: String, icon: String, color: Color, isLong: Bool) -> some View {
+        if isLong {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 12))

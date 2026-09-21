@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 /// Drives the overlay's visible state. `Phase` is a deliberately small stand-in for the real
 /// state machine in Docs/PLANNING.md §38 (IDLE/UNDERSTANDING/EXECUTING/VERIFYING/...) — enough to
@@ -16,8 +17,18 @@ final class OverlayViewModel {
         case failed(message: String)
     }
 
+    private static let logger = Logger(subsystem: "com.cmdslash.CmdSlash", category: "OverlayViewModel")
+
     var inputText: String = ""
-    var phase: Phase = .idle
+    var phase: Phase = .idle {
+        didSet {
+            // .notice, not .debug — persisted by default (log show), so a failure that flashes
+            // by on screen before the user can read it is still diagnosable afterward.
+            if case .failed(let message) = phase {
+                Self.logger.notice("phase failed: \(message, privacy: .public)")
+            }
+        }
+    }
     var isListening: Bool = false
     /// Bumped each time the overlay is shown so the view can re-focus the text field
     /// (see Docs/PLANNING.md §15 — voice/text should be ready the instant the panel appears).
@@ -199,6 +210,9 @@ final class OverlayViewModel {
             case (nil, nil):
                 return nil
             }
+        case "run_coding_agent":
+            guard let task = call.input["task"] as? String, let repoPath = call.input["repo_path"] as? String else { return nil }
+            return "Let Claude Code work on \"\(task)\" in \(repoPath)? It will read and modify files there."
         default:
             return "Proceed with \(call.name)?"
         }
@@ -435,6 +449,22 @@ final class OverlayViewModel {
             let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery, aroundTime: aroundTime)
             let summary = "Deleted \"\(result.deletedTitle)\""
             return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "run_coding_agent":
+            guard
+                let task = call.input["task"] as? String,
+                let repoPath = call.input["repo_path"] as? String
+            else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Running Claude Code in \(repoPath)...")
+            let result = try await CodingAgentTool().execute(task: task, repoPath: repoPath)
+            let repoName = URL(fileURLWithPath: result.repoPath).lastPathComponent
+            let changeNote = result.gitChangeSummary.map { "\n\nChanges:\n\($0)" } ?? "\n\n(No git changes detected.)"
+            return ToolExecutionOutcome(
+                modelFacingContent: "Claude Code finished in \(repoName).\n\nOutput:\n\(result.output)\(changeNote)",
+                uiSummary: result.gitChangeSummary != nil ? "Claude Code made changes in \(repoName)" : "Claude Code ran but made no changes in \(repoName)"
+            )
 
         default:
             throw UnknownToolError(tool: call.name)

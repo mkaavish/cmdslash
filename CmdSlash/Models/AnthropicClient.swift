@@ -169,6 +169,18 @@ struct AnthropicClient {
                     ],
                     "required": []
                 ]
+            ],
+            [
+                "name": "run_coding_agent",
+                "description": "Delegate a coding task to Claude Code, which reads and modifies files in a real repository (implementing features, fixing bugs, making other code changes). Only for a task within a specific existing project directory — not for simple file reads (use read_file for that).",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "task": ["type": "string", "description": "A clear description of the coding task, e.g. \"implement a dark mode toggle in Settings\"."],
+                        "repo_path": ["type": "string", "description": "Absolute or ~-relative path to the project's root directory, e.g. \"~/Documents/MyProject\"."]
+                    ],
+                    "required": ["task", "repo_path"]
+                ]
             ]
         ]
     }
