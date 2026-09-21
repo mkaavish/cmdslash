@@ -292,7 +292,11 @@ struct AnthropicClient {
         Call plan_multi_step instead — even if only one action tool would end up being used — \
         whenever:
         - the request is phrased as a question (see the test above), OR
-        - the request needs multiple tools chained together, OR
+        - the request names MULTIPLE distinct actions, however joined ("and", "then", a comma, \
+        two verbs) — e.g. "open YouTube AND find F1 videos", "go to X and tell me Y". Do not call \
+        one tool for just the first part and stop: if you can only take one action this turn, \
+        calling the tool for one part of a two-part request silently drops the other part exactly \
+        as surely as never doing it — the user asked for both, not "start on it", OR
         - the request asks you to summarize, explain, analyze, or otherwise interpret what a \
         tool's output contains. read_file, browser_get_page_text, and browser_navigate aren't \
         even offered to you here for exactly this reason — they only make sense as steps within \
