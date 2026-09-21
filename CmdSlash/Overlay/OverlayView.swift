@@ -41,7 +41,7 @@ struct OverlayView: View {
                         }
                     }
                     .onChange(of: viewModel.inputText) { _, _ in
-                        if !viewModel.isApplyingSpeechUpdate {
+                        if !viewModel.isApplyingProgrammaticTextUpdate {
                             viewModel.userDidType()
                         }
                     }

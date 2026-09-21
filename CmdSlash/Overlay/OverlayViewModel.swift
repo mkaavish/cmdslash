@@ -22,11 +22,21 @@ final class OverlayViewModel {
     var inputText: String = ""
     var phase: Phase = .idle {
         didSet {
-            // .notice, not .debug — persisted by default (log show), so a failure that flashes
-            // by on screen before the user can read it is still diagnosable afterward.
-            if case .failed(let message) = phase {
-                Self.logger.notice("phase failed: \(message, privacy: .public)")
-            }
+            // .notice, not .debug — persisted by default (log show). Logs every transition, not
+            // just failures, so "did it actually reach .completed" is answerable after the fact
+            // rather than guessed at.
+            let description = Self.describe(self.phase)
+            Self.logger.notice("phase -> \(description, privacy: .public)")
+        }
+    }
+
+    private static func describe(_ phase: Phase) -> String {
+        switch phase {
+        case .idle: "idle"
+        case .executing(let step): "executing(\(step))"
+        case .awaitingConfirmation(let summary): "awaitingConfirmation(\(summary))"
+        case .completed(let summary): "completed(\(summary))"
+        case .failed(let message): "failed(\(message))"
         }
     }
     var isListening: Bool = false
@@ -37,10 +47,14 @@ final class OverlayViewModel {
     var onDismissRequested: (() -> Void)?
 
     private let speechRecognizer = SpeechRecognizer()
-    /// True only while `inputText` is being set from a speech transcript, so the view can tell a
-    /// speech-driven update apart from the user actually typing (Docs/PLANNING.md §6: typing
-    /// silently discards voice capture).
-    private(set) var isApplyingSpeechUpdate = false
+    /// True only while `inputText` is being set programmatically (a speech transcript, or
+    /// clearing the field after a command finishes) rather than by the user actually typing.
+    /// SwiftUI's onChange fires identically either way, so without this guard our own cleanup
+    /// (e.g. clearing the field post-completion) gets misread as "user started typing" and
+    /// triggers userDidType()'s completed/failed -> idle reset — which is exactly how a
+    /// just-set .completed phase was getting silently reverted to .idle within milliseconds,
+    /// before the success message could ever be seen.
+    private(set) var isApplyingProgrammaticTextUpdate = false
     private var silenceTask: Task<Void, Never>?
     /// The in-flight fast-path task, if any. Cancel must genuinely interrupt this, not just hide
     /// the panel (Docs/PLANNING.md §37, §38) — a tool call left running after the user cancels is
@@ -134,10 +148,10 @@ final class OverlayViewModel {
     }
 
     private func applySpeechTranscript(_ transcript: String) {
-        isApplyingSpeechUpdate = true
+        isApplyingProgrammaticTextUpdate = true
         inputText = transcript
         DispatchQueue.main.async { [weak self] in
-            self?.isApplyingSpeechUpdate = false
+            self?.isApplyingProgrammaticTextUpdate = false
         }
 
         // Trailing-silence auto-submit (Docs/PLANNING.md §17): each new partial result resets
@@ -167,7 +181,11 @@ final class OverlayViewModel {
         runningTask = Task {
             await route(text: trimmed)
             guard !Task.isCancelled else { return }
+            isApplyingProgrammaticTextUpdate = true
             inputText = ""
+            DispatchQueue.main.async { [weak self] in
+                self?.isApplyingProgrammaticTextUpdate = false
+            }
             // The text field was disabled (and lost keyboard focus) during .executing — without
             // this, Enter/Escape land nowhere until the user clicks back into the field manually.
             requestFocus()
