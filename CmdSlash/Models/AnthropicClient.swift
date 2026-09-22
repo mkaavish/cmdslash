@@ -361,9 +361,14 @@ struct AnthropicClient {
         calling the tool for one part of a two-part request silently drops the other part exactly \
         as surely as never doing it — the user asked for both, not "start on it", OR
         - the request asks you to summarize, explain, analyze, or otherwise interpret what a \
-        tool's output contains. read_file, browser_get_page_text, and browser_navigate aren't \
-        even offered to you here for exactly this reason — they only make sense as steps within \
-        that further reasoning, never as a standalone answer.
+        tool's output contains, OR asks about content/state currently on screen in ANY app, not \
+        just a webpage (e.g. "summarize what's on screen", "what does this say", "read this to \
+        me") — read_file, browser_get_page_text, browser_navigate, and read_screen_content aren't \
+        even offered to you here for exactly this reason. They only make sense as steps within \
+        that further reasoning, never as a standalone answer — but they DO exist and are available \
+        one level up, in the full agentic loop plan_multi_step hands off to. Never conclude a \
+        screen/content-reading request is unsupported just because you personally have no matching \
+        tool in this limited list — that conclusion is only valid one level up, not here.
 
         If the request doesn't clearly match anything, respond with a brief plain-text explanation \
         and call no tool.
