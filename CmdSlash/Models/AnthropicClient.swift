@@ -208,6 +208,18 @@ struct AnthropicClient {
                 ]
             ],
             [
+                "name": "list_calendar_events",
+                "description": "List calendar events in a date range — e.g. \"what's on my calendar today\", \"do I have anything tomorrow\", \"show me this week's events\". Resolve a relative range (\"today\", \"tomorrow\", \"this week\", \"next Monday\") to absolute ISO 8601 start/end timestamps using the current date/time given in context. If the request doesn't name a range at all, omit both and it defaults to today.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "start": ["type": "string", "description": "ISO 8601 start of the range, e.g. 2026-09-21T00:00:00-07:00. Defaults to the start of today if omitted."],
+                        "end": ["type": "string", "description": "ISO 8601 end of the range, e.g. 2026-09-22T00:00:00-07:00. Defaults to the end of today if omitted."]
+                    ],
+                    "required": []
+                ]
+            ],
+            [
                 "name": "run_coding_agent",
                 "description": "Delegate a coding task to Claude Code, which reads and modifies files in a real repository (implementing features, fixing bugs, making other code changes). Only for a task within a specific existing project directory — not for simple file reads (use read_file for that).",
                 "input_schema": [

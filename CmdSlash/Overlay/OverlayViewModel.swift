@@ -319,6 +319,23 @@ final class OverlayViewModel {
         return formatter.string(from: date)
     }
 
+    private static func formatEventList(_ events: [ListCalendarEventsTool.EventSummary]) -> String {
+        guard !events.isEmpty else { return "No events found in that range." }
+
+        let dateTimeFormatter = DateFormatter()
+        dateTimeFormatter.dateStyle = .short
+        dateTimeFormatter.timeStyle = .short
+        let dateOnlyFormatter = DateFormatter()
+        dateOnlyFormatter.dateStyle = .short
+
+        let lines = events.map { event -> String in
+            let whenText = event.isAllDay ? dateOnlyFormatter.string(from: event.startDate) : dateTimeFormatter.string(from: event.startDate)
+            let locationNote = event.location.map { " (\($0))" } ?? ""
+            return "- \(whenText): \(event.title)\(locationNote)"
+        }
+        return "\(events.count) event\(events.count == 1 ? "" : "s"):\n\(lines.joined(separator: "\n"))"
+    }
+
     // MARK: - Routing (Docs/PLANNING.md §27-29)
 
     /// Classifies once via the fast path; a plain tool call runs immediately, `plan_multi_step`
@@ -342,7 +359,13 @@ final class OverlayViewModel {
 
         switch classification {
         case .explanation(let message):
-            phase = .failed(message: message)
+            // Not an error: the model responded with text instead of a tool call, same as the
+            // agentic path's finalText-with-no-toolUse case below (which already uses .completed).
+            // This covers a genuine clarifying question just as much as a direct answer pulled
+            // from conversationHistory alone (e.g. a follow-up question fully answerable from
+            // what a prior tool call already returned, with no new tool call needed) — neither is
+            // a failure, so a red error icon here was actively misleading.
+            phase = .completed(summary: message)
         case .toolCall(let call) where call.name == "plan_multi_step":
             let goal = (call.input["goal"] as? String) ?? text
             await runAgenticPath(goal: goal, context: context)
@@ -562,6 +585,22 @@ final class OverlayViewModel {
             phase = .executing(step: "Deleting event...")
             let result = try DeleteCalendarEventTool().execute(titleQuery: titleQuery, aroundTime: aroundTime)
             let summary = "Deleted \"\(result.deletedTitle)\""
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
+
+        case "list_calendar_events":
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            let endOfToday = Calendar.current.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+            let start = (call.input["start"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? startOfToday
+            let end = (call.input["end"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? endOfToday
+
+            phase = .executing(step: "Requesting Calendar access...")
+            guard await CalendarAccess.requestFullAccess() else {
+                throw CalendarAccessDeniedError()
+            }
+
+            phase = .executing(step: "Reading calendar...")
+            let events = try ListCalendarEventsTool().execute(start: start, end: end)
+            let summary = Self.formatEventList(events)
             return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
 
         case "run_coding_agent":
