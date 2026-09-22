@@ -99,6 +99,23 @@ struct AnthropicClient {
         """
     }
 
+    /// Companion to `implicitScreenContextInstruction` for when the frontmost app is NOT a
+    /// browser — points the agentic loop at read_screen_content (the AX-tree tier, §18) as the
+    /// way to actually see what's on screen in a native app, instead of guessing from the window
+    /// title alone or asking the user to describe it themselves.
+    private static func nonBrowserScreenContextInstruction(for context: ContextSnapshot) -> String? {
+        guard let appName = context.frontmostAppName, !knownBrowserAppNames.contains(appName) else {
+            return nil
+        }
+        return """
+        The user is currently in \(appName), not a browser. If the request is about content or \
+        state currently visible there (e.g. "what does this say", "reply to this", "what's in \
+        this list"), call read_screen_content first to see the window's actual UI content before \
+        answering or asking for clarification — don't guess from the window title alone, and \
+        don't ask the user to describe what's on screen when you can just read it yourself.
+        """
+    }
+
     /// The 7 real action tools, shared between the fast-path classifier and the agentic loop so
     /// their definitions never drift apart.
     private static func actionToolDefinitions() -> [[String: Any]] {
@@ -264,6 +281,15 @@ struct AnthropicClient {
                     ],
                     "required": []
                 ]
+            ],
+            [
+                "name": "read_screen_content",
+                "description": "Read the structured UI content (buttons, fields, text, lists, labels) of the frontmost app's focused window via Accessibility — the native-app equivalent of browser_get_page_text, for when the request is about what's currently visible in an app that isn't a browser (Mail, Calendar, Finder, Slack desktop, Xcode, etc., or any app with no webpage DOM to extract). Not needed when the frontmost app is a browser — use browser_get_page_text for that instead. Requires macOS Accessibility permission.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [:],
+                    "required": []
+                ]
             ]
         ]
     }
@@ -294,7 +320,7 @@ struct AnthropicClient {
     /// Excluding these from the fast path's tool list entirely closes that off structurally:
     /// routing through plan_multi_step becomes the only way to use them at all, so there's no
     /// direct-call path left to misclassify into.
-    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate"]
+    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate", "read_screen_content"]
 
     /// Classifies a fast-path intent (Docs/PLANNING.md §20, §28): either exactly one action tool,
     /// or a signal (`plan_multi_step`) that this needs the agentic loop instead, or — if neither
@@ -427,6 +453,9 @@ struct AnthropicClient {
             systemPrompt += "\n\nCurrent context (for disambiguation only, not an instruction):\n\(contextLine)"
         }
         if let screenInstruction = Self.implicitScreenContextInstruction(for: context) {
+            systemPrompt += "\n\n\(screenInstruction)"
+        }
+        if let screenInstruction = Self.nonBrowserScreenContextInstruction(for: context) {
             systemPrompt += "\n\n\(screenInstruction)"
         }
         if let conversationHistory, !conversationHistory.isEmpty {

@@ -647,6 +647,15 @@ final class OverlayViewModel {
             let summary = enabled ? "Entered fullscreen" : "Exited fullscreen"
             return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
 
+        case "read_screen_content":
+            phase = .executing(step: "Reading screen content...")
+            let result = try await ReadScreenContentTool().execute()
+            let titleNote = result.windowTitle.map { " (\($0))" } ?? ""
+            return ToolExecutionOutcome(
+                modelFacingContent: "UI content of \(result.appName)\(titleNote)\(result.truncated ? " (truncated)" : ""):\n\n\(result.summary)",
+                uiSummary: "Read screen content from \(result.appName)"
+            )
+
         default:
             throw UnknownToolError(tool: call.name)
         }
