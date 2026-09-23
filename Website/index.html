@@ -235,9 +235,9 @@ main section{padding-block:88px;}
 .toggle-btn{border:none;background:transparent;color:var(--text-dim);font-family:var(--font-display);font-weight:600;font-size:0.85rem;padding:9px 18px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background 0.2s ease,color 0.2s ease;}
 .toggle-btn.is-active{background:var(--text);color:var(--bg);}
 .toggle-badge{margin-left:6px;font-size:0.75rem;opacity:0.7;}
-.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);align-items:start;gap:20px;text-align:left;margin-bottom:16px;}
-.plan-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:30px;}
-.plan-card-pro{border-color:rgba(255,255,255,0.16);background:linear-gradient(135deg,var(--accent-soft),transparent 55%),var(--surface);}
+.plan-grid{display:grid;grid-template-columns:repeat(4,1fr);align-items:start;gap:18px;text-align:left;margin-bottom:16px;}
+.plan-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px;}
+.plan-card-highlight{border-color:rgba(255,255,255,0.16);background:linear-gradient(135deg,var(--accent-soft),transparent 55%),var(--surface);}
 .plan-label{font-family:var(--font-mono);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-faint);margin:0 0 12px;}
 .plan-name{font-size:1.15rem;font-weight:600;margin:0 0 8px;}
 .plan-position{color:var(--text-dim);font-size:0.9rem;line-height:1.5;min-height:2.7em;margin:0 0 22px;}
@@ -291,6 +291,10 @@ main section{padding-block:88px;}
 
 .site-footer{padding-block:44px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
 .site-footer p{color:var(--text-faint);font-size:0.85rem;}
+
+@media (min-width:861px) and (max-width:1080px){
+  .plan-grid{grid-template-columns:repeat(2,1fr);}
+}
 
 @media (max-width:860px){
   .hero-inner{grid-template-columns:1fr;gap:44px;padding-inline:20px;}
@@ -582,7 +586,7 @@ main section{padding-block:88px;}
     <div class="container">
       <p class="beta-tag">Planned launch pricing</p>
       <h2 class="section-title">Simple pricing.</h2>
-      <p class="section-subtitle">Start free. Upgrade when CmdSlash becomes part of your day.</p>
+      <p class="section-subtitle">Start small. Upgrade when CmdSlash becomes part of your day.</p>
 
       <div class="pricing-toggle-row">
         <div class="pricing-toggle" role="group" aria-label="Billing period">
@@ -593,12 +597,12 @@ main section{padding-block:88px;}
 
       <div class="plan-grid">
 
-        <div class="plan-card" data-plan="free">
-          <h3 class="plan-name">Free</h3>
-          <p class="plan-position">Try CmdSlash and automate everyday Mac tasks.</p>
+        <div class="plan-card" data-plan="basic">
+          <h3 class="plan-name">Basic</h3>
+          <p class="plan-position">Automate everyday Mac tasks.</p>
           <div class="plan-price">
-            <span class="plan-price-amount">$0</span>
-            <span class="plan-price-period">Forever</span>
+            <span class="plan-price-amount">$0.99</span>
+            <span class="plan-price-period">/month</span>
           </div>
           <div class="plan-billing" aria-hidden="true"></div>
           <ul class="plan-features">
@@ -611,7 +615,7 @@ main section{padding-block:88px;}
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Limited cross-app workflows</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Try advanced workflows</li>
           </ul>
-          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Free">Join the waitlist</a>
+          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Basic">Join the waitlist</a>
         </div>
 
         <div class="plan-card" data-plan="student">
@@ -624,7 +628,7 @@ main section{padding-block:88px;}
           </div>
           <div class="plan-billing" id="studentBilling"></div>
           <ul class="plan-features">
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Free</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Basic</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Generous AI agent usage</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Cross-app workflows</li>
@@ -638,17 +642,38 @@ main section{padding-block:88px;}
           <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Student">Get student access</a>
         </div>
 
-        <div class="plan-card plan-card-pro" data-plan="pro">
+        <div class="plan-card plan-card-highlight" data-plan="plus">
           <p class="plan-label">Most popular</p>
-          <h3 class="plan-name">Pro</h3>
+          <h3 class="plan-name">Plus</h3>
           <p class="plan-position">For people who want CmdSlash throughout their day.</p>
           <div class="plan-price">
-            <span class="plan-price-amount" id="proAmount">$11.99</span>
+            <span class="plan-price-amount" id="plusAmount">$9.99</span>
+            <span class="plan-price-period" id="plusPeriod">/month</span>
+          </div>
+          <div class="plan-billing" id="plusBilling"></div>
+          <ul class="plan-features">
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Basic</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Higher AI agent usage</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Cross-app workflows</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Coding agent</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Advanced AI models</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Longer tasks</li>
+          </ul>
+          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Plus">Get Plus</a>
+        </div>
+
+        <div class="plan-card" data-plan="pro">
+          <p class="plan-label">Full CmdSlash</p>
+          <h3 class="plan-name">Pro</h3>
+          <p class="plan-position">For people who run CmdSlash constantly, all day long.</p>
+          <div class="plan-price">
+            <span class="plan-price-amount" id="proAmount">$19.99</span>
             <span class="plan-price-period" id="proPeriod">/month</span>
           </div>
           <div class="plan-billing" id="proBilling"></div>
           <ul class="plan-features">
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Free</li>
+            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Plus</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Highest AI agent usage</li>
             <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Full cross-app workflows</li>
@@ -688,7 +713,7 @@ main section{padding-block:88px;}
 
       <p class="pricing-value">Priced below many premium AI tools.</p>
       <div class="pricing-compare">
-        <div class="pricing-compare-row"><span>CmdSlash Pro</span><span>$11.99/mo</span></div>
+        <div class="pricing-compare-row"><span>CmdSlash Plus</span><span>$9.99/mo</span></div>
         <div class="pricing-compare-row pricing-compare-row-muted"><span>Many premium AI tools</span><span>$15-$20+/mo</span></div>
       </div>
 
@@ -769,7 +794,8 @@ main section{padding-block:88px;}
   /* Pricing: centralized config + Monthly/Annual toggle */
   var PRICING = {
     student: { monthly: 4.99, annualFirstYear: 35.99, annualRegular: 47.99 },
-    pro: { monthly: 11.99, annualFirstYear: 85.99, annualRegular: 114.99 }
+    plus: { monthly: 9.99, annualFirstYear: 71.99, annualRegular: 95.99 },
+    pro: { monthly: 19.99, annualFirstYear: 143.99, annualRegular: 191.99 }
   };
   var toggleMonthlyBtn = $('toggleMonthly');
   var toggleAnnualBtn = $('toggleAnnual');
@@ -781,7 +807,7 @@ main section{padding-block:88px;}
 
   function applyPricing(period) {
     var isAnnual = period === 'annual';
-    ['student', 'pro'].forEach(function (key) {
+    ['student', 'plus', 'pro'].forEach(function (key) {
       var cfg = PRICING[key];
       var amountEl = $(key + 'Amount');
       var periodEl = $(key + 'Period');
@@ -818,6 +844,7 @@ main section{padding-block:88px;}
     }
     var fadeEls = document.querySelectorAll(
       '.plan-card[data-plan="student"] .plan-price, .plan-card[data-plan="student"] .plan-billing,' +
+      '.plan-card[data-plan="plus"] .plan-price, .plan-card[data-plan="plus"] .plan-billing,' +
       '.plan-card[data-plan="pro"] .plan-price, .plan-card[data-plan="pro"] .plan-billing'
     );
     fadeEls.forEach(function (el) { el.classList.add('is-fading'); });
