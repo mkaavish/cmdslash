@@ -13,19 +13,28 @@ final class OverlayWindowController {
     private let viewModel = OverlayViewModel()
     private var previouslyFrontmostApp: NSRunningApplication?
 
-    private let panelWidth: CGFloat = 560
+    private let barWidth: CGFloat = 560
     private let compactHeight: CGFloat = 88
     private let expandedHeight: CGFloat = 280
+    /// Meaningfully bigger than the compact/expanded bar — a real time-axis calendar grid needs
+    /// real space (§CalendarGridView).
+    private let calendarSize = CGSize(width: 680, height: 560)
+    /// The compact/expanded bar's fixed position, computed once at launch — returning to
+    /// compact/expanded from calendar mode (which repositions the panel entirely, see below) then
+    /// snaps back to the bar's usual spot instead of wherever the calendar panel happened to land.
+    private let barOriginX: CGFloat
+    private let barTopY: CGFloat
 
     init() {
         let screenFrame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let originX = screenFrame.midX - panelWidth / 2
+        barOriginX = screenFrame.midX - barWidth / 2
         let originY = screenFrame.minY + screenFrame.height * 0.68
-        let contentRect = NSRect(x: originX, y: originY, width: panelWidth, height: compactHeight)
+        barTopY = originY + compactHeight
+        let contentRect = NSRect(x: barOriginX, y: originY, width: barWidth, height: compactHeight)
 
         panel = OverlayPanel(contentRect: contentRect)
-        let hosting = NSHostingView(rootView: OverlayView(viewModel: viewModel, onExpansionChange: { [weak self] isExpanded in
-            self?.setExpanded(isExpanded)
+        let hosting = NSHostingView(rootView: OverlayView(viewModel: viewModel, onSizeChange: { [weak self] size in
+            self?.applySize(size)
         }))
         hosting.autoresizingMask = [.width, .height]
         hosting.frame = NSRect(origin: .zero, size: contentRect.size)
@@ -40,11 +49,22 @@ final class OverlayWindowController {
         }
     }
 
-    private func setExpanded(_ expanded: Bool) {
-        let newHeight = expanded ? expandedHeight : compactHeight
-        guard abs(panel.frame.height - newHeight) > 1 else { return }
-        let topY = panel.frame.maxY // anchor the top edge, grow/shrink downward
-        let newFrame = NSRect(x: panel.frame.minX, y: topY - newHeight, width: panelWidth, height: newHeight)
+    private func applySize(_ size: OverlayPanelSize) {
+        let newFrame: NSRect
+        switch size {
+        case .compact, .expanded:
+            let newHeight = size == .compact ? compactHeight : expandedHeight
+            newFrame = NSRect(x: barOriginX, y: barTopY - newHeight, width: barWidth, height: newHeight)
+        case .calendar:
+            // Wide/tall enough that anchoring to the bar's usual position (fairly low on screen,
+            // §15) would often run it off the bottom edge — center it on the whole screen instead,
+            // like a normal window, rather than anchoring to the bar.
+            let screenFrame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+            let originX = screenFrame.midX - calendarSize.width / 2
+            let originY = screenFrame.midY - calendarSize.height / 2
+            newFrame = NSRect(origin: NSPoint(x: originX, y: originY), size: calendarSize)
+        }
+        guard newFrame != panel.frame else { return }
         panel.setFrame(newFrame, display: true, animate: true)
     }
 
@@ -65,7 +85,7 @@ final class OverlayWindowController {
         // frontmost, and ContextEngine would report "CmdSlash" as the frontmost app instead of
         // whatever the user was actually looking at (Docs/PLANNING.md §18's whole point).
         viewModel.captureScreenContext()
-        setExpanded(false) // always start compact, regardless of how the previous session ended
+        applySize(.compact) // always start compact, regardless of how the previous session ended
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         // Deferred to the next runloop turn so the panel is already key by the time

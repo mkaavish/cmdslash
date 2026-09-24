@@ -39,6 +39,20 @@ final class OverlayViewModel {
         case .failed(let message): "failed(\(message))"
         }
     }
+    /// Structured data for CalendarGridView, set by list_calendar_events alongside its normal text
+    /// summary. Kept separate from `phase` (which only ever carries a String) rather than adding a
+    /// dedicated Phase case, since this is presentation data for one specific tool's result, not a
+    /// new state the state machine itself needs to reason about. Carries the exact queried range
+    /// alongside the events — CalendarGridView derives which day columns to show from THIS, not
+    /// from the events' own dates, since EventKit correctly returns a multi-day all-day event that
+    /// merely overlaps the query range (e.g. an assignment window starting days earlier), and
+    /// deriving days from event dates alone would show an extra day nobody asked about.
+    struct CalendarDisplayData {
+        let events: [ListCalendarEventsTool.EventSummary]
+        let rangeStart: Date
+        let rangeEnd: Date
+    }
+    var calendarDisplayData: CalendarDisplayData?
     var isListening: Bool = false
     /// Bumped each time the overlay is shown so the view can re-focus the text field
     /// (see Docs/PLANNING.md §15 — voice/text should be ready the instant the panel appears).
@@ -220,6 +234,10 @@ final class OverlayViewModel {
         stopVoiceCapture()
         phase = .executing(step: "Understanding: \"\(trimmed)\"")
         lastActionActivatedAnotherApp = false
+        // Cleared per-submission, not just on full reset() — otherwise a calendar grid from an
+        // earlier command in the same overlay session would linger and incorrectly reappear once
+        // an unrelated new command reaches .completed, since the grid's only other gate is phase.
+        calendarDisplayData = nil
 
         // No auto-dismiss: the panel stays open showing the result until the user explicitly
         // dismisses (Escape) or restarts (Cmd+/ again).
@@ -330,7 +348,12 @@ final class OverlayViewModel {
 
         let lines = events.map { event -> String in
             let whenText = event.isAllDay ? dateOnlyFormatter.string(from: event.startDate) : dateTimeFormatter.string(from: event.startDate)
-            let locationNote = event.location.map { " (\($0))" } ?? ""
+            // EventKit's location is often itself multi-line (e.g. "Venue Name\nStreet, City, ST
+            // Zip") — left as-is, those embedded newlines make each event look like several
+            // separate bullet items once this text is re-rendered as markdown (by our own parser,
+            // or by a model summarizing the tool result), instead of one bullet with an address.
+            let flattenedLocation = event.location?.replacingOccurrences(of: "\n", with: ", ")
+            let locationNote = flattenedLocation.map { " (\($0))" } ?? ""
             return "- \(whenText): \(event.title)\(locationNote)"
         }
         return "\(events.count) event\(events.count == 1 ? "" : "s"):\n\(lines.joined(separator: "\n"))"
@@ -593,6 +616,12 @@ final class OverlayViewModel {
 
             phase = .executing(step: "Reading calendar...")
             let events = try ListCalendarEventsTool().execute(start: start, end: end)
+            // Structured data for CalendarGridView, kept separate from the text summary the model
+            // sees/reads back — a real visual grid replaces the bullet list in the overlay once
+            // this is set, but only when there's actually something to draw. Carries the exact
+            // queried [start, end) so the grid shows exactly the days asked about, not whatever
+            // days happen to appear in the events themselves (see CalendarDisplayData).
+            calendarDisplayData = events.isEmpty ? nil : CalendarDisplayData(events: events, rangeStart: start, rangeEnd: end)
             let summary = Self.formatEventList(events)
             return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
 
@@ -706,5 +735,6 @@ final class OverlayViewModel {
         phase = .idle
         lastActionActivatedAnotherApp = false
         recentExchanges = []
+        calendarDisplayData = nil
     }
 }

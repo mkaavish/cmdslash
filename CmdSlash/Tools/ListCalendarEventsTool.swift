@@ -3,7 +3,10 @@ import EventKit
 /// The `list_calendar_events` tool (Docs/PLANNING.md §21). Read-only, unlike create/delete, so
 /// it's low risk (§30) — no confirmation needed.
 struct ListCalendarEventsTool {
-    struct EventSummary {
+    /// Identifiable (not just Equatable) so CalendarGridView can hand these straight to ForEach —
+    /// title alone isn't a safe id (e.g. a recurring "Gym" appearing twice the same day).
+    struct EventSummary: Identifiable {
+        let id = UUID()
         let title: String
         let startDate: Date
         let endDate: Date

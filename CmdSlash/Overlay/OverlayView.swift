@@ -1,23 +1,38 @@
 import SwiftUI
 
+/// The three panel sizes the overlay can take. `.calendar` is meaningfully bigger than the other
+/// two (a real time-axis grid needs real space) and, unlike compact/expanded, is positioned by
+/// `OverlayWindowController` centered on the whole screen rather than anchored to the compact
+/// bar's position — anchoring a ~560pt-tall panel to the bar's usual position (fairly low on
+/// screen, §15) would often run it off the bottom edge.
+enum OverlayPanelSize: Equatable {
+    case compact
+    case expanded
+    case calendar
+}
+
 /// The `cmd/` overlay's content. Voice and text share one field (Docs/PLANNING.md §6) — speech
 /// streams in live, and typing at any point silently takes over. Short results (most tool
 /// completions) stay on the compact one-line bar; long ones (agentic-path summaries, §29, or a
-/// long high-risk confirmation, §30) expand into a scrollable text area — `onExpansionChange`
-/// tells `OverlayWindowController` which size the panel itself needs to be, since a SwiftUI view
-/// stretched to fill a fixed-size hosting view can't reliably report its own "natural" size back
-/// out (that's circular).
+/// long high-risk confirmation, §30) expand into a scrollable text area; a populated
+/// `calendarDisplayData` (list_calendar_events) shows a real visual calendar grid instead —
+/// `onSizeChange` tells `OverlayWindowController` which size the panel itself needs to be, since a
+/// SwiftUI view stretched to fill a fixed-size hosting view can't reliably report its own
+/// "natural" size back out (that's circular).
 struct OverlayView: View {
     @Bindable var viewModel: OverlayViewModel
     @FocusState private var isFocused: Bool
-    var onExpansionChange: ((Bool) -> Void)?
+    var onSizeChange: ((OverlayPanelSize) -> Void)?
 
-    private var isExpanded: Bool {
+    private var panelSize: OverlayPanelSize {
+        if viewModel.calendarDisplayData != nil, case .completed = viewModel.phase {
+            return .calendar
+        }
         switch viewModel.phase {
-        case .completed(let summary): Self.isLong(summary)
-        case .failed(let message): Self.isLong(message)
-        case .awaitingConfirmation(let summary): Self.isLong(summary)
-        case .idle, .executing: false
+        case .completed(let summary): return Self.isLong(summary) ? .expanded : .compact
+        case .failed(let message): return Self.isLong(message) ? .expanded : .compact
+        case .awaitingConfirmation(let summary): return Self.isLong(summary) ? .expanded : .compact
+        case .idle, .executing: return .compact
         }
     }
 
@@ -58,7 +73,7 @@ struct OverlayView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
-        .frame(width: 560, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxHeight: .infinity)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -66,8 +81,8 @@ struct OverlayView: View {
                 .strokeBorder(Color.white.opacity(0.08))
         )
         .onChange(of: viewModel.focusToken) { _, _ in isFocused = true }
-        .onChange(of: isExpanded) { _, newValue in onExpansionChange?(newValue) }
-        .onAppear { onExpansionChange?(isExpanded) }
+        .onChange(of: panelSize) { _, newValue in onSizeChange?(newValue) }
+        .onAppear { onSizeChange?(panelSize) }
     }
 
     @ViewBuilder
@@ -78,7 +93,7 @@ struct OverlayView: View {
         case .executing(let step):
             compactLine(step, icon: "arrow.forward.circle", color: .secondary)
         case .awaitingConfirmation(let summary):
-            // isLong is decided on the raw summary alone, same value isExpanded above uses — the
+            // isLong is decided on the raw summary alone, same value panelSize above uses — the
             // fixed "Enter to confirm..." hint appended below must not affect that decision, or
             // this view and the panel-sizing decision could disagree about whether to expand.
             resultArea(
@@ -88,7 +103,11 @@ struct OverlayView: View {
                 isLong: Self.isLong(summary)
             )
         case .completed(let summary):
-            resultArea(summary, icon: "checkmark.circle.fill", color: .green, isLong: Self.isLong(summary))
+            if let data = viewModel.calendarDisplayData {
+                CalendarGridView(events: data.events, rangeStart: data.rangeStart, rangeEnd: data.rangeEnd)
+            } else {
+                resultArea(summary, icon: "checkmark.circle.fill", color: .green, isLong: Self.isLong(summary))
+            }
         case .failed(let message):
             resultArea(message, icon: "xmark.circle.fill", color: .red, isLong: Self.isLong(message))
         }
