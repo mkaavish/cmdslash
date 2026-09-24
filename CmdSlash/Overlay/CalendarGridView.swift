@@ -108,7 +108,7 @@ struct CalendarGridView: View {
                             .padding(.horizontal, 4)
                             .padding(.vertical, 2)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.accentColor.opacity(0.55), in: RoundedRectangle(cornerRadius: 4))
+                            .background(Self.color(for: event).opacity(0.75), in: RoundedRectangle(cornerRadius: 4))
                     }
                 }
                 .padding(.horizontal, 2)
@@ -170,9 +170,15 @@ struct CalendarGridView: View {
             .padding(.vertical, 2)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: blockHeight, alignment: .top)
-            .background(Color.accentColor.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
+            .background(Self.color(for: event).opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
             .padding(.horizontal, 2)
             .offset(y: yOffset)
+    }
+
+    /// Falls back to the app's accent color for an event whose calendar has no color set (rare,
+    /// but not something EventKit guarantees against).
+    private static func color(for event: ListCalendarEventsTool.EventSummary) -> Color {
+        event.calendarColor.map { Color($0) } ?? Color.accentColor
     }
 
     private func timedEvents(on day: Date) -> [ListCalendarEventsTool.EventSummary] {

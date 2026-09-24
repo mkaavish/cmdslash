@@ -1,4 +1,5 @@
 import EventKit
+import CoreGraphics
 
 /// The `list_calendar_events` tool (Docs/PLANNING.md §21). Read-only, unlike create/delete, so
 /// it's low risk (§30) — no confirmation needed.
@@ -13,6 +14,10 @@ struct ListCalendarEventsTool {
         let isAllDay: Bool
         let location: String?
         let calendarTitle: String
+        /// The source calendar's own color (as set in Calendar.app), so CalendarGridView can
+        /// color-code events by calendar the same way Calendar.app itself does, instead of every
+        /// event looking identical.
+        let calendarColor: CGColor?
     }
 
     enum ToolError: Error, LocalizedError {
@@ -44,7 +49,8 @@ struct ListCalendarEventsTool {
                 endDate: $0.endDate ?? end,
                 isAllDay: $0.isAllDay,
                 location: $0.location,
-                calendarTitle: $0.calendar?.title ?? "Calendar"
+                calendarTitle: $0.calendar?.title ?? "Calendar",
+                calendarColor: $0.calendar?.cgColor
             )
         }
     }
