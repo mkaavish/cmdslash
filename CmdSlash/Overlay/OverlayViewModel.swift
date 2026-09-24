@@ -260,7 +260,7 @@ final class OverlayViewModel {
         return String(data: data, encoding: .utf8)
     }
 
-    private func recordToolCall(_ call: AnthropicClient.ToolCall, resultSummary: String?, errorMessage: String?) {
+    private func recordToolCall(_ call: OpenAIClient.ToolCall, resultSummary: String?, errorMessage: String?) {
         var entry: [String: Any] = ["tool": call.name, "input": call.input]
         if let resultSummary { entry["result"] = resultSummary }
         if let errorMessage { entry["error"] = errorMessage }
@@ -284,7 +284,7 @@ final class OverlayViewModel {
         confirmationContinuation = nil
     }
 
-    private func confirmationSummary(for call: AnthropicClient.ToolCall) -> String? {
+    private func confirmationSummary(for call: OpenAIClient.ToolCall) -> String? {
         switch call.name {
         case "create_calendar_event":
             guard let title = call.input["title"] as? String else { return nil }
@@ -346,9 +346,9 @@ final class OverlayViewModel {
         // user was actually looking at.
         let context = capturedScreenContext
 
-        let classification: AnthropicClient.ClassificationResult
+        let classification: OpenAIClient.ClassificationResult
         do {
-            let client = try AnthropicClient()
+            let client = try OpenAIClient()
             classification = try await client.classifyFastPathIntent(text, context: context, conversationHistory: conversationHistoryForPrompt)
         } catch {
             guard !Task.isCancelled else { return }
@@ -375,7 +375,7 @@ final class OverlayViewModel {
     }
 
     /// The fast path (§28): one tool call, confirmed if risky, executed, done.
-    private func runSingleTool(_ call: AnthropicClient.ToolCall) async {
+    private func runSingleTool(_ call: OpenAIClient.ToolCall) async {
         do {
             if RiskClassifier.riskLevel(forTool: call.name) != .low {
                 guard let summary = confirmationSummary(for: call) else {
@@ -410,9 +410,9 @@ final class OverlayViewModel {
         let maxSteps = 6
 
         for _ in 1...maxSteps {
-            let turn: AnthropicClient.AgenticTurn
+            let turn: OpenAIClient.AgenticTurn
             do {
-                let client = try AnthropicClient()
+                let client = try OpenAIClient()
                 turn = try await client.sendAgenticTurn(messages: messages, context: context, conversationHistory: conversationHistoryForPrompt)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -421,9 +421,9 @@ final class OverlayViewModel {
             }
             guard !Task.isCancelled else { return }
 
-            messages.append(["role": "assistant", "content": turn.assistantContent])
+            messages.append(turn.assistantMessage)
 
-            guard let toolUse = turn.toolUse, let toolUseID = turn.toolUseID else {
+            guard let toolUse = turn.toolUse, let toolCallID = turn.toolCallID else {
                 phase = .completed(summary: turn.finalText ?? "Done")
                 return
             }
@@ -445,25 +445,17 @@ final class OverlayViewModel {
                 let outcome = try await executeTool(toolUse)
                 guard !Task.isCancelled else { return }
                 recordToolCall(toolUse, resultSummary: outcome.uiSummary, errorMessage: nil)
-                messages.append([
-                    "role": "user",
-                    "content": [["type": "tool_result", "tool_use_id": toolUseID, "content": outcome.modelFacingContent]]
-                ])
+                messages.append(["role": "tool", "tool_call_id": toolCallID, "content": outcome.modelFacingContent])
             } catch {
                 guard !Task.isCancelled else { return }
                 recordToolCall(toolUse, resultSummary: nil, errorMessage: error.localizedDescription)
-                // Fed back to the model as a tool_result rather than failing outright — real
+                // Fed back to the model as a tool result rather than failing outright — real
                 // replanning (§37): the model gets to decide whether to try something else or
                 // explain to the user why it can't proceed, instead of the loop just giving up.
-                messages.append([
-                    "role": "user",
-                    "content": [[
-                        "type": "tool_result",
-                        "tool_use_id": toolUseID,
-                        "content": "Error: \(error.localizedDescription)",
-                        "is_error": true
-                    ]]
-                ])
+                // OpenAI's tool-result messages have no separate "is_error" flag (unlike
+                // Anthropic's), so the error is just plain content text — the model reads it the
+                // same way either way.
+                messages.append(["role": "tool", "tool_call_id": toolCallID, "content": "Error: \(error.localizedDescription)"])
             }
         }
 
@@ -472,7 +464,7 @@ final class OverlayViewModel {
 
     // MARK: - Tool dispatch (shared by both paths above)
 
-    private func executeTool(_ call: AnthropicClient.ToolCall) async throws -> ToolExecutionOutcome {
+    private func executeTool(_ call: OpenAIClient.ToolCall) async throws -> ToolExecutionOutcome {
         switch call.name {
         case "open_application":
             guard let name = call.input["name"] as? String else {
@@ -498,9 +490,10 @@ final class OverlayViewModel {
             // tab/window below when there's no browser in front, or the bridge isn't reachable.
             if !newWindow,
                let appName = capturedScreenContext.frontmostAppName,
-               AnthropicClient.knownBrowserAppNames.contains(appName),
+               OpenAIClient.knownBrowserAppNames.contains(appName),
                BrowserBridgeServer.shared.isExtensionConnected,
                let navigateResult = try? await BrowserNavigateTool().execute(urlString: urlString, timeout: 5) {
+                await BrowserActivation.activateChrome() // the bridge call alone won't switch Spaces for a fullscreen Chrome window
                 summary = "Opened \(navigateResult.finalURL)"
             } else {
                 let url = try OpenURLTool().execute(urlString: urlString, newWindow: newWindow)
@@ -625,7 +618,8 @@ final class OverlayViewModel {
             }
             phase = .executing(step: "Navigating to \(urlString)...")
             let result = try await BrowserNavigateTool().execute(urlString: urlString)
-            lastActionActivatedAnotherApp = true // brings the browser forward
+            await BrowserActivation.activateChrome() // the bridge call alone won't switch Spaces for a fullscreen Chrome window
+            lastActionActivatedAnotherApp = true
             let summary = "Opened \(result.finalURL)"
             return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
 
@@ -639,6 +633,17 @@ final class OverlayViewModel {
                 modelFacingContent: "Page at \(result.url)\(titleNote)\(result.truncated ? " (truncated)" : ""):\n\n\(result.text)\(linksNote)",
                 uiSummary: "Read \(result.text.count) characters from \(result.title.isEmpty ? result.url : result.title)"
             )
+
+        case "browser_click":
+            guard let text = call.input["text"] as? String, !text.isEmpty else {
+                throw MalformedToolCallError(tool: call.name)
+            }
+            phase = .executing(step: "Clicking \"\(text)\"...")
+            let result = try await BrowserClickTool().execute(text: text)
+            await BrowserActivation.activateChrome() // the bridge call alone won't switch Spaces for a fullscreen Chrome window
+            lastActionActivatedAnotherApp = true
+            let summary = "Clicked \"\(result.matchedText)\""
+            return ToolExecutionOutcome(modelFacingContent: summary, uiSummary: summary)
 
         case "set_fullscreen":
             let enabled = (call.input["enabled"] as? Bool) ?? true

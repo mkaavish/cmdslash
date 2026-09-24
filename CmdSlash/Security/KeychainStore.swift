@@ -43,6 +43,10 @@ enum KeychainStore {
         guard let data = result as? Data, let value = String(data: data, encoding: .utf8) else {
             throw KeychainError.unexpectedData
         }
-        return value
+        // A trailing newline from how a credential was originally pasted/typed into `security
+        // add-generic-password` is easy to pick up invisibly and corrupts anything that embeds
+        // this directly into an HTTP header (e.g. "Bearer <key>\n" is not a valid header value) —
+        // trim defensively for every caller rather than relying on each one to remember to.
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -1,12 +1,21 @@
 import Foundation
 import os
 
-/// Minimal Anthropic Messages API client. Two request shapes share the same 7 action tools
-/// (Docs/PLANNING.md §21): a single-shot fast-path classification (§26-28, Haiku) and a real
-/// multi-turn agentic loop (§20, §29, Sonnet) for requests that need more than one tool chained
-/// together. Non-streaming for now — streaming (§40) is a later upgrade to the same request
-/// shape, not an architecture change.
-struct AnthropicClient {
+/// Minimal OpenAI Chat Completions API client — replaces the earlier Anthropic-based
+/// AnthropicClient. Two request shapes share the same action tools (Docs/PLANNING.md §21): a
+/// single-shot fast-path classification (§26-28) and a real multi-turn agentic loop (§20, §29)
+/// for requests that need more than one tool chained together. Non-streaming for now — streaming
+/// (§40) is a later upgrade to the same request shape, not an architecture change. Single model
+/// tier by design (unlike the old Haiku/Sonnet split): one model handles both the fast path and
+/// the agentic loop.
+///
+/// NOTE: "gpt-5.4-mini" below is this session's best-effort model identifier — it hasn't been
+/// verified against a live OpenAI API call (no access to one here). If it's wrong, the API
+/// rejects it with a clear "model not found" error rather than failing silently, so that's the
+/// first thing to check once real requests are being made. Likewise `parallel_tool_calls` and
+/// `max_completion_tokens` are OpenAI's current documented parameter names as of this client's
+/// writing — worth reconfirming against OpenAI's own docs if either is ever rejected.
+struct OpenAIClient {
     struct ToolCall {
         let name: String
         let input: [String: Any]
@@ -21,10 +30,14 @@ struct AnthropicClient {
 
     /// One turn of the agentic loop: either a tool call to execute and feed back, or — when
     /// `toolUse` is nil — the model judged the goal accomplished and `finalText` is its answer.
+    /// `assistantMessage` is the exact {role, content, tool_calls} dict OpenAI returned, appended
+    /// to the running `messages` array verbatim by the caller — OpenAI's multi-turn format needs
+    /// this preserved exactly as returned so a later tool-result message's `tool_call_id` lines
+    /// up with what the model itself emitted.
     struct AgenticTurn {
-        let assistantContent: [[String: Any]]
+        let assistantMessage: [String: Any]
         let toolUse: ToolCall?
-        let toolUseID: String?
+        let toolCallID: String?
         let finalText: String?
     }
 
@@ -35,28 +48,21 @@ struct AnthropicClient {
         var errorDescription: String? {
             switch self {
             case .httpError(let code, let body):
-                "Anthropic API returned \(code): \(body.prefix(300))"
+                "OpenAI API returned \(code): \(body.prefix(300))"
             case .invalidResponse:
-                "Couldn't parse the Anthropic API response."
+                "Couldn't parse the OpenAI API response."
             }
         }
     }
 
-    private static let logger = Logger(subsystem: "com.cmdslash.CmdSlash", category: "AnthropicClient")
+    private static let logger = Logger(subsystem: "com.cmdslash.CmdSlash", category: "OpenAIClient")
 
     private let apiKey: String
-    private let fastModel: String
-    private let reasoningModel: String
-    /// Only needed for API keys that aren't scoped to a single workspace (org-level/admin keys) —
-    /// Anthropic then requires the workspace to use explicitly. Not a secret, so it lives in
-    /// UserDefaults rather than the Keychain (see Docs/PLANNING.md §34 for what does need Keychain).
-    private let workspaceID: String?
+    private let model: String
 
-    init(fastModel: String = "claude-haiku-4-5-20251001", reasoningModel: String = "claude-sonnet-5") throws {
-        self.apiKey = try KeychainStore.readString(service: "com.cmdslash.apikeys.anthropic")
-        self.fastModel = fastModel
-        self.reasoningModel = reasoningModel
-        self.workspaceID = UserDefaults.standard.string(forKey: "AnthropicWorkspaceID")
+    init(model: String = "gpt-5.4-mini") throws {
+        self.apiKey = try KeychainStore.readString(service: "com.cmdslash.apikeys.openai")
+        self.model = model
     }
 
     private static func currentDateTimeDescription() -> String {
@@ -116,8 +122,10 @@ struct AnthropicClient {
         """
     }
 
-    /// The 7 real action tools, shared between the fast-path classifier and the agentic loop so
-    /// their definitions never drift apart.
+    /// The real action tools, shared between the fast-path classifier and the agentic loop so
+    /// their definitions never drift apart. Kept in Anthropic's name/description/input_schema
+    /// shape — `openAITools(from:)` wraps these into OpenAI's {type, function} shape right before
+    /// sending, so this list itself doesn't need touching if the wire format changes again later.
     private static func actionToolDefinitions() -> [[String: Any]] {
         [
             [
@@ -260,6 +268,17 @@ struct AnthropicClient {
                 ]
             ],
             [
+                "name": "browser_click",
+                "description": "Click a visible button, link, or other clickable element on the active browser tab, matched by its visible text (e.g. \"Add to Cart\", \"Sign in\", the exact or close text of a link browser_get_page_text just showed you) — not a CSS selector. An exact case-insensitive match is preferred; if none exists, the first element whose text contains what you gave is clicked instead. Use this for interacting with a page (submitting a search, following something that isn't a plain link, paginating) rather than just reading it. Requires the CmdSlash browser extension to be installed and Chrome to be open.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "text": ["type": "string", "description": "The visible text of the element to click, as seen on the page."]
+                    ],
+                    "required": ["text"]
+                ]
+            ],
+            [
                 "name": "browser_get_page_text",
                 "description": "Retrieve the active browser tab's raw visible text — this only returns the text, it does not summarize or interpret it. Requires the CmdSlash browser extension to be installed and Chrome to be open.",
                 "input_schema": [
@@ -311,16 +330,26 @@ struct AnthropicClient {
 
     /// Tools whose result on its own is never actually useful to the user — their fast-path
     /// completion message would just be "Read N characters from X" or "Opened X", not an answer
-    /// to whatever they asked. browser_navigate is included here too, not just the obvious
-    /// content-retrieval tools: open_url already covers plain "go to X" via the system default
-    /// browser, so browser_navigate's real value is as a step within multi-step exploration
-    /// (following an extracted link to find something), not as a fast-path standalone action —
-    /// and despite repeated prompt tightening, the classifier kept reaching for it directly for
-    /// "what's the latest X" style requests, navigating without anything then reading the result.
-    /// Excluding these from the fast path's tool list entirely closes that off structurally:
-    /// routing through plan_multi_step becomes the only way to use them at all, so there's no
-    /// direct-call path left to misclassify into.
-    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate", "read_screen_content"]
+    /// to whatever they asked. Excluding these from the fast path's tool list entirely closes
+    /// that off structurally: routing through plan_multi_step becomes the only way to use them at
+    /// all, so there's no direct-call path left to misclassify into.
+    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate", "read_screen_content", "browser_click"]
+
+    /// Wraps a tool definition (name/description/input_schema) into OpenAI's function-calling
+    /// shape. JSON Schema itself is identical between input_schema and OpenAI's `parameters` — no
+    /// structural conversion needed beyond the rename/wrapper.
+    private static func openAITools(from definitions: [[String: Any]]) -> [[String: Any]] {
+        definitions.map { definition in
+            [
+                "type": "function",
+                "function": [
+                    "name": definition["name"] as Any,
+                    "description": definition["description"] as Any,
+                    "parameters": definition["input_schema"] as Any
+                ]
+            ]
+        }
+    }
 
     /// Classifies a fast-path intent (Docs/PLANNING.md §20, §28): either exactly one action tool,
     /// or a signal (`plan_multi_step`) that this needs the agentic loop instead, or — if neither
@@ -356,15 +385,23 @@ struct AnthropicClient {
         whenever:
         - the request is phrased as a question (see the test above), OR
         - the request names MULTIPLE distinct actions, however joined ("and", "then", a comma, \
-        two verbs) — e.g. "open YouTube AND find F1 videos", "go to X and tell me Y". Do not call \
-        one tool for just the first part and stop: if you can only take one action this turn, \
-        calling the tool for one part of a two-part request silently drops the other part exactly \
-        as surely as never doing it — the user asked for both, not "start on it", OR
+        two verbs) — e.g. "open YouTube AND find F1 videos", "go to X and tell me Y", "search X \
+        AND click/open the first result". Do not call one tool for just the first part and stop: \
+        if you can only take one action this turn, calling the tool for one part of a two-part \
+        request silently drops the other part exactly as surely as never doing it — the user asked \
+        for both, not "start on it". This applies even when open_url's own search-URL-construction \
+        (above) could satisfy the FIRST half alone — opening a site's search-results page is not \
+        the same as clicking/opening what's found there, so "search X and click the first result" \
+        is still two actions, and the second one (an actual click) isn't even a tool you have \
+        access to here — that alone means the whole request needs plan_multi_step, not just the \
+        search half, OR
         - the request asks you to summarize, explain, analyze, or otherwise interpret what a \
         tool's output contains, OR asks about content/state currently on screen in ANY app, not \
         just a webpage (e.g. "summarize what's on screen", "what does this say", "read this to \
-        me") — read_file, browser_get_page_text, browser_navigate, and read_screen_content aren't \
-        even offered to you here for exactly this reason. They only make sense as steps within \
+        me"), OR needs to interact with a page beyond just reading/opening it (clicking something, \
+        submitting a search, paginating) — read_file, browser_get_page_text, browser_navigate, \
+        read_screen_content, and browser_click aren't even offered to you here for exactly this \
+        reason. They only make sense as steps within \
         that further reasoning, never as a standalone answer — but they DO exist and are available \
         one level up, in the full agentic loop plan_multi_step hands off to. Never conclude a \
         screen/content-reading request is unsupported just because you personally have no matching \
@@ -399,32 +436,29 @@ struct AnthropicClient {
         }
 
         let json = try await sendRequest(
-            model: fastModel,
             maxTokens: 256,
-            system: systemPrompt,
-            tools: tools,
+            systemPrompt: systemPrompt,
+            tools: Self.openAITools(from: tools),
             messages: [["role": "user", "content": text]]
         )
-        let content = try Self.content(from: json)
+        let message = try Self.message(from: json)
 
-        for block in content where block["type"] as? String == "tool_use" {
-            if let name = block["name"] as? String, let input = block["input"] as? [String: Any] {
-                return .toolCall(ToolCall(name: name, input: input))
-            }
+        if let toolCalls = message["tool_calls"] as? [[String: Any]],
+           let first = toolCalls.first,
+           let call = Self.toolCall(from: first) {
+            return .toolCall(call)
         }
 
-        let explanation = content
-            .compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let explanation = ((message["content"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return .explanation(explanation.isEmpty ? "Not sure how to do that yet" : explanation)
     }
 
     /// One turn of the real multi-step agentic loop (Docs/PLANNING.md §20, §29). The caller owns
-    /// `messages` (accumulating across turns in Anthropic's tool-use message format) and appends
-    /// `assistantContent` plus the tool_result it produces before calling this again — this
-    /// method itself is stateless per call, "never plans further than it can verify" one turn at
-    /// a time rather than returning an upfront multi-step plan.
+    /// `messages` (accumulating across turns in OpenAI's chat message format — no system message
+    /// in here, this method injects its own each call) and appends `assistantMessage` plus a
+    /// `{role: "tool", ...}` result before calling this again — this method itself is stateless
+    /// per call, "never plans further than it can verify" one turn at a time rather than
+    /// returning an upfront multi-step plan.
     func sendAgenticTurn(messages: [[String: Any]], context: ContextSnapshot, conversationHistory: String? = nil) async throws -> AgenticTurn {
         var systemPrompt = """
         You are CmdSlash's agent, working step by step toward the user's goal using the tools \
@@ -479,56 +513,72 @@ struct AnthropicClient {
         }
 
         let json = try await sendRequest(
-            model: reasoningModel,
             maxTokens: 1024,
-            system: systemPrompt,
-            tools: Self.actionToolDefinitions(),
+            systemPrompt: systemPrompt,
+            tools: Self.openAITools(from: Self.actionToolDefinitions()),
             messages: messages
         )
-        let content = try Self.content(from: json)
+        let message = try Self.message(from: json)
+        var assistantMessage = message
+        assistantMessage["role"] = "assistant"
 
-        for block in content where block["type"] as? String == "tool_use" {
-            if let name = block["name"] as? String, let input = block["input"] as? [String: Any], let id = block["id"] as? String {
-                return AgenticTurn(assistantContent: content, toolUse: ToolCall(name: name, input: input), toolUseID: id, finalText: nil)
-            }
+        if let toolCalls = message["tool_calls"] as? [[String: Any]],
+           let first = toolCalls.first,
+           let call = Self.toolCall(from: first),
+           let id = first["id"] as? String {
+            return AgenticTurn(assistantMessage: assistantMessage, toolUse: call, toolCallID: id, finalText: nil)
         }
 
-        let finalText = content
-            .compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return AgenticTurn(assistantContent: content, toolUse: nil, toolUseID: nil, finalText: finalText.isEmpty ? "Done" : finalText)
+        let finalText = ((message["content"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return AgenticTurn(assistantMessage: assistantMessage, toolUse: nil, toolCallID: nil, finalText: finalText.isEmpty ? "Done" : finalText)
+    }
+
+    /// OpenAI returns function-call arguments as a JSON-encoded STRING, not a native object —
+    /// unlike the old Anthropic client's `input`, this needs an explicit parse. A malformed or
+    /// unparseable arguments string still returns a ToolCall (with empty input) rather than
+    /// throwing, so the existing per-tool `guard let X = call.input[...]` dispatch in
+    /// OverlayViewModel naturally produces a MalformedToolCallError instead of losing the call
+    /// entirely.
+    private static func toolCall(from rawToolCall: [String: Any]) -> ToolCall? {
+        guard let function = rawToolCall["function"] as? [String: Any], let name = function["name"] as? String else {
+            return nil
+        }
+        guard
+            let argumentsString = function["arguments"] as? String,
+            let argumentsData = argumentsString.data(using: .utf8),
+            let input = (try? JSONSerialization.jsonObject(with: argumentsData)) as? [String: Any]
+        else {
+            return ToolCall(name: name, input: [:])
+        }
+        return ToolCall(name: name, input: input)
     }
 
     private func sendRequest(
-        model: String,
         maxTokens: Int,
-        system: String,
+        systemPrompt: String,
         tools: [[String: Any]],
         messages: [[String: Any]]
     ) async throws -> [String: Any] {
+        let fullMessages: [[String: Any]] = [["role": "system", "content": systemPrompt]] + messages
+
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": maxTokens,
-            "system": system,
+            "max_completion_tokens": maxTokens,
+            "messages": fullMessages,
             "tools": tools,
-            // disable_parallel_tool_use: the agentic loop executes and confirms one step at a
-            // time (Docs/PLANNING.md §20 — "never plan further than it can verify"). Without
-            // this, the model can return multiple tool_use blocks in a single turn; this code
-            // only executes the first, leaving any additional tool_use id with no matching
-            // tool_result, which the API then rejects outright on the next call.
-            "tool_choice": ["type": "auto", "disable_parallel_tool_use": true],
-            "messages": messages
+            "tool_choice": "auto",
+            // Mirrors the old client's disable_parallel_tool_use: the agentic loop executes and
+            // confirms one step at a time (Docs/PLANNING.md §20 — "never plan further than it can
+            // verify"). Without this, the model can return multiple tool calls in a single turn;
+            // this code only executes the first, leaving any additional tool_call id with no
+            // matching tool result, which the API would then reject on the next call.
+            "parallel_tool_calls": false
         ]
 
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
         request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let workspaceID {
-            request.setValue(workspaceID, forHTTPHeaderField: "anthropic-workspace-id")
-        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -542,7 +592,7 @@ struct AnthropicClient {
             // debug/info, and the API's own error text is the fastest way to diagnose a 400 here.
             let requestBody = (try? JSONSerialization.data(withJSONObject: messages, options: [.prettyPrinted]))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "<couldn't serialize>"
-            Self.logger.error("Anthropic API error \(http.statusCode, privacy: .public): \(responseBody, privacy: .public)\nRequest messages:\n\(requestBody, privacy: .public)")
+            Self.logger.error("OpenAI API error \(http.statusCode, privacy: .public): \(responseBody, privacy: .public)\nRequest messages:\n\(requestBody, privacy: .public)")
             throw ClientError.httpError(http.statusCode, responseBody)
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -551,10 +601,14 @@ struct AnthropicClient {
         return json
     }
 
-    private static func content(from json: [String: Any]) throws -> [[String: Any]] {
-        guard let content = json["content"] as? [[String: Any]] else {
+    private static func message(from json: [String: Any]) throws -> [String: Any] {
+        guard
+            let choices = json["choices"] as? [[String: Any]],
+            let first = choices.first,
+            let message = first["message"] as? [String: Any]
+        else {
             throw ClientError.invalidResponse
         }
-        return content
+        return message
     }
 }

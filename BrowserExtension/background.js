@@ -90,6 +90,50 @@ async function executeAction(action, params) {
     return result;
   }
 
+  if (action === "click") {
+    const tab = await getActiveTab();
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [params.text || ""],
+      func: (searchText) => {
+        const normalizedTarget = searchText.trim().toLowerCase();
+        if (!normalizedTarget) {
+          return { clicked: false, reason: "No text given to match." };
+        }
+
+        const candidates = Array.from(
+          document.querySelectorAll('a, button, input[type="submit"], input[type="button"], [role="button"], [onclick]')
+        ).filter((el) => {
+          const style = window.getComputedStyle(el);
+          return style.display !== "none" && style.visibility !== "hidden" && el.offsetParent !== null;
+        });
+
+        const textOf = (el) =>
+          (el.innerText || el.value || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim();
+
+        // Prefer an exact (case-insensitive) match over the first substring match — a page often
+        // has both "Cart" and "Add to Cart", and the model usually named the one it actually meant.
+        let target = candidates.find((el) => textOf(el).toLowerCase() === normalizedTarget);
+        if (!target) {
+          target = candidates.find((el) => textOf(el).toLowerCase().includes(normalizedTarget));
+        }
+        if (!target) {
+          return { clicked: false, reason: `No visible clickable element matching "${searchText}" was found.` };
+        }
+
+        target.scrollIntoView({ block: "center" });
+        target.click();
+        return { clicked: true, matchedText: textOf(target) };
+      },
+    });
+    if (!result || !result.clicked) {
+      throw new Error((result && result.reason) || "Click failed.");
+    }
+    // Give the page a moment to react (navigation, DOM update) before the caller reads it again.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { matchedText: result.matchedText };
+  }
+
   throw new Error(`Unknown action: ${action}`);
 }
 
