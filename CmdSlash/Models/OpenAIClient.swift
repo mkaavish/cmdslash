@@ -309,6 +309,30 @@ struct OpenAIClient {
                     "properties": [:],
                     "required": []
                 ]
+            ],
+            [
+                "name": "confirm_batch_actions",
+                "description": "Call this ONCE, before executing a set of multiple risky/destructive actions whose full details you've ALREADY determined (e.g., after reading the calendar to find exactly which events match \"all my Gym events this week\"), so the user approves the whole batch in a single confirmation instead of being interrupted for each one individually. List one entry per planned action with a short, specific, human-readable description of exactly what it will do. After approval, proceed to call each real action tool (create_calendar_event, delete_calendar_event, etc.) for every step you listed, in the same order — those calls will NOT be confirmed again, so only list steps you're actually about to perform, not speculative ones. Do not use this for a single risky action (its own confirmation is already enough) or before you've gathered the information needed to know the concrete list of actions — read first (list_calendar_events, browser_get_page_text, read_screen_content, etc., none of which need confirmation), THEN batch-confirm, THEN execute.",
+                "input_schema": [
+                    "type": "object",
+                    "properties": [
+                        "steps": [
+                            "type": "array",
+                            "description": "One entry per risky action you're about to take, in the order you'll take them.",
+                            "items": [
+                                "type": "object",
+                                "properties": [
+                                    "description": [
+                                        "type": "string",
+                                        "description": "A short, specific, human-readable description of exactly what this one action will do, e.g. \"Delete 'Gym' on 9/22 at 1:00 PM\"."
+                                    ]
+                                ],
+                                "required": ["description"]
+                            ]
+                        ]
+                    ],
+                    "required": ["steps"]
+                ]
             ]
         ]
     }
@@ -333,7 +357,7 @@ struct OpenAIClient {
     /// to whatever they asked. Excluding these from the fast path's tool list entirely closes
     /// that off structurally: routing through plan_multi_step becomes the only way to use them at
     /// all, so there's no direct-call path left to misclassify into.
-    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate", "read_screen_content", "browser_click"]
+    private static let agenticOnlyToolNames: Set<String> = ["read_file", "browser_get_page_text", "browser_navigate", "read_screen_content", "browser_click", "confirm_batch_actions"]
 
     /// Wraps a tool definition (name/description/input_schema) into OpenAI's function-calling
     /// shape. JSON Schema itself is identical between input_schema and OpenAI's `parameters` — no
@@ -485,6 +509,16 @@ struct OpenAIClient {
         quite right. Only search again if the page came back empty, clearly off-topic, or the user \
         explicitly asked you to find one particular, uniquely identifiable item (e.g. "open the \
         official trailer" or a specific URL/title they named).
+
+        If the goal needs MULTIPLE risky/destructive actions once you know exactly what they are \
+        (e.g. "delete all my Gym events this week" — after reading the calendar, you know exactly \
+        which events those are), don't execute them one at a time with a separate confirmation \
+        for each. Instead, once you've gathered enough information to know the full concrete list, \
+        call confirm_batch_actions ONCE with one entry per action, get a single approval for the \
+        whole batch, then proceed to call each real action tool in order — those won't be \
+        confirmed again. This only applies once you already know the specific list; don't call it \
+        speculatively before you've actually determined what the actions are, and don't use it for \
+        just one risky action (that tool's own confirmation is already enough on its own).
 
         Current date and time: \(Self.currentDateTimeDescription())
         """

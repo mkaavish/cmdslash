@@ -16,6 +16,11 @@ enum RiskClassifier {
             .high
         case "run_coding_agent":
             .high
+        case "confirm_batch_actions":
+            // Not destructive itself — it's the confirmation gate for a batch of already-
+            // determined risky actions (Docs/PLANNING.md §30) — but it must still always require
+            // confirmation, same as any other non-low tool, so it can't be silently skipped.
+            .medium
         default:
             .low
         }

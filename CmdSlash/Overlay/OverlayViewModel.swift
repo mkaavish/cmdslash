@@ -324,6 +324,12 @@ final class OverlayViewModel {
         case "run_coding_agent":
             guard let task = call.input["task"] as? String, let repoPath = call.input["repo_path"] as? String else { return nil }
             return "Let Claude Code work on \"\(task)\" in \(repoPath)? It will read and modify files there."
+        case "confirm_batch_actions":
+            guard let stepsArray = call.input["steps"] as? [[String: Any]], !stepsArray.isEmpty else { return nil }
+            let descriptions = stepsArray.compactMap { $0["description"] as? String }
+            guard descriptions.count == stepsArray.count else { return nil }
+            let numbered = descriptions.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+            return "Approve \(descriptions.count) action\(descriptions.count == 1 ? "" : "s")?\n\(numbered)\nThese won't be confirmed again individually."
         default:
             return "Proceed with \(call.name)?"
         }
@@ -425,12 +431,18 @@ final class OverlayViewModel {
     }
 
     /// The agentic path (§20, §29): a real multi-turn loop — call a tool, observe the result,
-    /// decide the next step or finish — rather than an upfront plan. Each risky step is still
-    /// confirmed individually, same as the fast path. Capped at maxSteps so a confused loop fails
-    /// loudly instead of running forever.
+    /// decide the next step or finish — rather than an upfront plan. A lone risky step is
+    /// confirmed individually; multiple risky steps the model has already fully determined (e.g.
+    /// "delete all my Gym events this week", once it knows exactly which events those are) get
+    /// batched into one confirmation via confirm_batch_actions instead of interrupting repeatedly
+    /// (§30) — `batchApprovedStepsRemaining` tracks how many subsequent risky calls that single
+    /// approval covers. Capped at maxSteps so a confused loop fails loudly instead of running
+    /// forever; raised from the earlier single-action-typical 6 to 10 since a batch of several
+    /// actions plus the reads needed to determine them can genuinely need more turns.
     private func runAgenticPath(goal: String, context: ContextSnapshot) async {
         var messages: [[String: Any]] = [["role": "user", "content": goal]]
-        let maxSteps = 6
+        let maxSteps = 10
+        var batchApprovedStepsRemaining = 0
 
         for _ in 1...maxSteps {
             let turn: OpenAIClient.AgenticTurn
@@ -451,7 +463,21 @@ final class OverlayViewModel {
                 return
             }
 
-            if RiskClassifier.riskLevel(forTool: toolUse.name) != .low {
+            // confirm_batch_actions is itself always confirmed (it IS the confirmation act, so it
+            // can never silently skip its own gate); an already-open batch consumes one of its
+            // pre-approved slots instead of asking again; anything else falls back to the normal
+            // per-tool risk check.
+            let needsConfirmation: Bool
+            if toolUse.name == "confirm_batch_actions" {
+                needsConfirmation = true
+            } else if batchApprovedStepsRemaining > 0 {
+                batchApprovedStepsRemaining -= 1
+                needsConfirmation = false
+            } else {
+                needsConfirmation = RiskClassifier.riskLevel(forTool: toolUse.name) != .low
+            }
+
+            if needsConfirmation {
                 guard let summary = confirmationSummary(for: toolUse) else {
                     phase = .failed(message: "Model returned a malformed \(toolUse.name) call")
                     return
@@ -462,6 +488,20 @@ final class OverlayViewModel {
                     phase = .failed(message: "Cancelled")
                     return
                 }
+            }
+
+            // Approval granted above — this tool has no real system action of its own to run, it
+            // just opens the batch allowance for the steps it listed and hands control back to
+            // the model to actually execute them.
+            if toolUse.name == "confirm_batch_actions" {
+                let stepCount = (toolUse.input["steps"] as? [[String: Any]])?.count ?? 0
+                batchApprovedStepsRemaining = stepCount
+                messages.append([
+                    "role": "tool",
+                    "tool_call_id": toolCallID,
+                    "content": "Approved \(stepCount) action\(stepCount == 1 ? "" : "s") — proceed to execute each one now, in order."
+                ])
+                continue
             }
 
             do {
