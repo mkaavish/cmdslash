@@ -1,20 +1,24 @@
 import Foundation
 import os
 
-/// Minimal OpenAI Chat Completions API client — replaces the earlier Anthropic-based
-/// AnthropicClient. Two request shapes share the same action tools (Docs/PLANNING.md §21): a
-/// single-shot fast-path classification (§26-28) and a real multi-turn agentic loop (§20, §29)
-/// for requests that need more than one tool chained together. Non-streaming for now — streaming
-/// (§40) is a later upgrade to the same request shape, not an architecture change. Single model
-/// tier by design (unlike the old Haiku/Sonnet split): one model handles both the fast path and
-/// the agentic loop.
+/// Minimal Chat Completions API client, talking to CmdSlash's own Supabase Edge Function relay
+/// (Docs/PLANNING.md §59) rather than OpenAI directly — the managed-key pivot away from BYOK.
+/// Two request shapes share the same action tools (§21): a single-shot fast-path classification
+/// (§26-28) and a real multi-turn agentic loop (§20, §29) for requests that need more than one
+/// tool chained together. Non-streaming for now — streaming (§40) is a later upgrade to the same
+/// request shape, not an architecture change. Single model tier by design (unlike the old
+/// Haiku/Sonnet split): one model handles both the fast path and the agentic loop.
 ///
-/// NOTE: "gpt-5.4-mini" below is this session's best-effort model identifier — it hasn't been
-/// verified against a live OpenAI API call (no access to one here). If it's wrong, the API
-/// rejects it with a clear "model not found" error rather than failing silently, so that's the
-/// first thing to check once real requests are being made. Likewise `parallel_tool_calls` and
-/// `max_completion_tokens` are OpenAI's current documented parameter names as of this client's
-/// writing — worth reconfirming against OpenAI's own docs if either is ever rejected.
+/// Auth is a Supabase session, not a static provider key: the Keychain holds a refresh token
+/// (§59.3 item 5), and every request first exchanges it for a fresh access token via
+/// `refreshAccessToken()` — simpler than tracking each access token's own ~1hr expiry client-side,
+/// at the cost of one extra HTTP round-trip per request (acceptable; dominated by the LLM call's
+/// own latency regardless). Supabase rotates the refresh token on every use, so the response's
+/// replacement is written back to Keychain each time — failing to persist it would strand the
+/// session after exactly one more successful call.
+///
+/// NOTE: "gpt-5.4-mini" below has been confirmed against a live call through the relay (§59
+/// Phase 1 verification) — a real, valid model identifier, not a guess.
 struct OpenAIClient {
     struct ToolCall {
         let name: String
@@ -44,24 +48,39 @@ struct OpenAIClient {
     enum ClientError: Error, LocalizedError {
         case httpError(Int, String)
         case invalidResponse
+        case sessionExpired
 
         var errorDescription: String? {
             switch self {
             case .httpError(let code, let body):
-                "OpenAI API returned \(code): \(body.prefix(300))"
+                "CmdSlash relay returned \(code): \(body.prefix(300))"
             case .invalidResponse:
-                "Couldn't parse the OpenAI API response."
+                "Couldn't parse the relay's response."
+            case .sessionExpired:
+                // No login UI exists yet (§59.3 item 5 is still open) — until it does, this is
+                // the honest thing to say rather than a generic "please sign in" that has nowhere
+                // to send the user.
+                "Your CmdSlash session couldn't be refreshed — it may have expired or been revoked. A fresh refresh token needs to be added to Keychain again until sign-in is built."
             }
         }
     }
 
     private static let logger = Logger(subsystem: "com.cmdslash.CmdSlash", category: "OpenAIClient")
 
-    private let apiKey: String
+    /// Public by Supabase's own design — meant to be embedded in client apps, protected by RLS
+    /// rather than secrecy (Docs/PLANNING.md §59.2's vendor-decision note covers this
+    /// distinction). Never the service role key, which stays server-side only, in the relay
+    /// function's own secrets.
+    private static let supabaseURL = "https://zwyakbxgdjplsqoxhnpy.supabase.co"
+    private static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eWFrYnhnZGpwbHNxb3hobnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0MzgwMjIsImV4cCI6MjEwNjAxNDAyMn0.VtjDXwLyZIvfMKoA5tYpufW0AnGRrJSkL0fTaJjzJHE"
+    private static let relayURL = "\(supabaseURL)/functions/v1/chat-relay"
+    /// Holds the Supabase refresh token, not an access token — access tokens are minted fresh
+    /// per request instead of cached (see the type-level doc comment above).
+    private static let sessionKeychainService = "com.cmdslash.session.refreshToken"
+
     private let model: String
 
-    init(model: String = "gpt-5.4-mini") throws {
-        self.apiKey = try KeychainStore.readString(service: "com.cmdslash.apikeys.openai")
+    init(model: String = "gpt-5.4-mini") {
         self.model = model
     }
 
@@ -624,9 +643,11 @@ struct OpenAIClient {
             "parallel_tool_calls": false
         ]
 
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        let accessToken = try await Self.refreshAccessToken()
+
+        var request = URLRequest(url: URL(string: Self.relayURL)!)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -638,16 +659,45 @@ struct OpenAIClient {
         guard (200..<300).contains(http.statusCode) else {
             let responseBody = String(data: data, encoding: .utf8) ?? "<no body>"
             // .error, not .debug — persisted by default in unified logging (log show), unlike
-            // debug/info, and the API's own error text is the fastest way to diagnose a 400 here.
+            // debug/info, and the relay's own error text (which includes OpenAI's, when it's the
+            // one that rejected the request) is the fastest way to diagnose a 400/402 here.
             let requestBody = (try? JSONSerialization.data(withJSONObject: messages, options: [.prettyPrinted]))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "<couldn't serialize>"
-            Self.logger.error("OpenAI API error \(http.statusCode, privacy: .public): \(responseBody, privacy: .public)\nRequest messages:\n\(requestBody, privacy: .public)")
+            Self.logger.error("Relay error \(http.statusCode, privacy: .public): \(responseBody, privacy: .public)\nRequest messages:\n\(requestBody, privacy: .public)")
             throw ClientError.httpError(http.statusCode, responseBody)
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ClientError.invalidResponse
         }
         return json
+    }
+
+    /// Exchanges the Keychain-stored refresh token for a fresh access token. Supabase rotates the
+    /// refresh token on every use — the response's replacement is written back to Keychain before
+    /// returning, since losing it would strand the session after this one call.
+    private static func refreshAccessToken() async throws -> String {
+        let refreshToken = try KeychainStore.readString(service: sessionKeychainService)
+
+        var request = URLRequest(url: URL(string: "\(supabaseURL)/auth/v1/token?grant_type=refresh_token")!)
+        request.httpMethod = "POST"
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard
+            let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let accessToken = json["access_token"] as? String,
+            let newRefreshToken = json["refresh_token"] as? String
+        else {
+            let responseBody = String(data: data, encoding: .utf8) ?? "<no body>"
+            logger.error("Session refresh failed: \(responseBody, privacy: .public)")
+            throw ClientError.sessionExpired
+        }
+
+        try KeychainStore.writeString(newRefreshToken, service: sessionKeychainService)
+        return accessToken
     }
 
     private static func message(from json: [String: Any]) throws -> [String: Any] {

@@ -49,4 +49,29 @@ enum KeychainStore {
         // trim defensively for every caller rather than relying on each one to remember to.
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// Upsert, not insert-only — needed for the Supabase session (§59): its refresh token rotates
+    /// on every use (using one invalidates it and issues a replacement), so the stored value has
+    /// to be overwritable in place, unlike the static provider API keys this type originally only
+    /// ever read.
+    static func writeString(_ value: String, service: String, account: String = NSUserName()) throws {
+        let data = Data(value.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if updateStatus == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainError.osStatus(addStatus)
+            }
+        } else if updateStatus != errSecSuccess {
+            throw KeychainError.osStatus(updateStatus)
+        }
+    }
 }
