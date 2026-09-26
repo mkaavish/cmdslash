@@ -3,7 +3,7 @@
   "name": "CmdSlash Browser Bridge",
   "version": "1.0",
   "description": "Lets CmdSlash navigate and read the active tab on your behalf, only when you explicitly ask it to.",
-  "permissions": ["tabs", "scripting"],
+  "permissions": ["tabs", "scripting", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

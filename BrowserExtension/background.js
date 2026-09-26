@@ -8,25 +8,49 @@
 // The polling loop below is deliberately self-healing rather than relying on a persistent
 // connection: Manifest V3 service workers can be terminated and respawned by Chrome at any time.
 // Because pollLoop() runs unconditionally at the top level of this file, it restarts automatically
-// every time the service worker re-executes for any reason — no separate "reconnect" logic needed.
+// every time the service worker re-executes for any reason — but "for any reason" isn't a real
+// guarantee: if Chrome decides there's nothing that needs the worker (no alarm, no pending event),
+// it can just stay terminated indefinitely, silently breaking the bridge until the extension is
+// manually reloaded. The chrome.alarms registration below forces a periodic wake regardless.
 
 const SERVER_BASE = "http://127.0.0.1:57130";
 
+// Guards against a duplicate concurrent loop: if the worker never actually died, the alarm still
+// fires on schedule, but pollLoop() below is already running — without this flag, each alarm would
+// start a second/third/... loop all hitting /poll at once.
+let pollLoopRunning = false;
+
 async function pollLoop() {
-  for (;;) {
-    try {
-      const response = await fetch(`${SERVER_BASE}/poll`);
-      const command = await response.json();
-      if (command && command.id) {
-        await handleCommand(command);
+  if (pollLoopRunning) return;
+  pollLoopRunning = true;
+  try {
+    for (;;) {
+      try {
+        const response = await fetch(`${SERVER_BASE}/poll`);
+        const command = await response.json();
+        if (command && command.id) {
+          await handleCommand(command);
+        }
+      } catch (error) {
+        // CmdSlash isn't running, or the port isn't reachable yet — back off briefly rather than
+        // spinning in a tight failure loop against a server that isn't there.
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
-    } catch (error) {
-      // CmdSlash isn't running, or the port isn't reachable yet — back off briefly rather than
-      // spinning in a tight failure loop against a server that isn't there.
-      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
+  } finally {
+    pollLoopRunning = false;
   }
 }
+
+// Chrome's minimum period for a repeating alarm is 1 minute — frequent enough that the bridge
+// recovers quickly after an idle-triggered termination, without registering something so frequent
+// Chrome would throttle it.
+chrome.alarms.create("keepPolling", { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "keepPolling") {
+    pollLoop();
+  }
+});
 
 async function handleCommand(command) {
   try {

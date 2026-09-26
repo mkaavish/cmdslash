@@ -7,13 +7,26 @@ import AppKit
 struct OpenURLTool {
     enum ToolError: Error, LocalizedError {
         case invalidURL(String)
+        case calendarFeedURL(String)
 
         var errorDescription: String? {
             switch self {
             case .invalidURL(let raw):
                 "\"\(raw)\" isn't a valid URL."
+            case .calendarFeedURL(let url):
+                // Phrased for the model, fed back as a tool result — live testing showed it
+                // reaching for open_url specifically as a workaround once browser_navigate
+                // rejected the same .ics link, every time trying to read the feed's content
+                // (which this hands off to Calendar.app instead of showing), never a genuine
+                // "subscribe to this feed" request.
+                "\"\(url)\" is a calendar-feed/subscription link (.ics/webcal) — opening it hands off to Calendar.app rather than showing any readable content, so it can't be used to read event details. Use the page's own on-page navigation instead (browser_click a next/previous-month control, or browser_navigate a different URL for the same calendar view)."
             }
         }
+    }
+
+    private static func isCalendarFeedURL(_ urlString: String) -> Bool {
+        let lowercased = urlString.lowercased()
+        return lowercased.hasSuffix(".ics") || lowercased.hasPrefix("webcal:") || lowercased.contains("/feeds/calendar")
     }
 
     /// `newWindow` is for an explicit "open a new window" request — `NSWorkspace.shared.open`
@@ -27,6 +40,9 @@ struct OpenURLTool {
     func execute(urlString: String, newWindow: Bool = false) throws -> URL {
         guard let url = URL(string: urlString), url.scheme != nil else {
             throw ToolError.invalidURL(urlString)
+        }
+        guard !Self.isCalendarFeedURL(urlString) else {
+            throw ToolError.calendarFeedURL(urlString)
         }
         guard newWindow, let browserAppURL = NSWorkspace.shared.urlForApplication(toOpen: url) else {
             NSWorkspace.shared.open(url)

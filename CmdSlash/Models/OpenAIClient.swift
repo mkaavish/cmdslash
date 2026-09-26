@@ -101,7 +101,9 @@ struct OpenAIClient {
         clarification if the request is genuinely unrelated to reading content at all, or \
         explicitly names a different app, file, or website — and when you do, phrase it narrowly \
         as: are they asking about the current page/site (name it), or something else (in which \
-        case ask them to say what)? Not an open-ended "what do you mean".
+        case ask them to say what)? Not an open-ended "what do you mean". To read what's actually \
+        on this page, use browser_get_page_text — NOT read_screen_content, which is only for \
+        native apps with no webpage DOM and will fail here even when it's otherwise available.
         """
     }
 
@@ -246,12 +248,12 @@ struct OpenAIClient {
             ],
             [
                 "name": "run_coding_agent",
-                "description": "Delegate a coding task to Claude Code, which reads and modifies files in a real repository (implementing features, fixing bugs, making other code changes). Only for a task within a specific existing project directory — not for simple file reads (use read_file for that).",
+                "description": "Delegate a coding task to Claude Code, which reads and modifies files in a real repository (implementing features, fixing bugs, making other code changes). Only for a task the user has clearly framed as working on SOFTWARE — an existing project, repository, or codebase they've named or that's evident from context (e.g. an IDE/editor frontmost). Never use this for calendar, browser, file-search, or other non-coding tasks, even if the request contains a programming-sounding word — \"Canvas\" almost always means the Canvas LMS/education website, not the HTML5 <canvas> element, unless there's an actual code-editing context. If you can't identify a specific real project directory the user means, this tool doesn't apply — do not guess or default to the home directory (~) or any other path; the home directory is rejected outright and never a valid target, no exceptions. Do NOT reach for this as a general fallback when you're unsure how to accomplish something with your other tools — it has no browser access and cannot see webpages, tabs, or on-screen content at all, so delegating an \"inspect this webpage / figure out what's needed\" task to it will never work regardless of what directory you give it. If a task needs a webpage read, use browser_get_page_text/browser_navigate directly instead — that's what those tools are for.",
                 "input_schema": [
                     "type": "object",
                     "properties": [
                         "task": ["type": "string", "description": "A clear description of the coding task, e.g. \"implement a dark mode toggle in Settings\"."],
-                        "repo_path": ["type": "string", "description": "Absolute or ~-relative path to the project's root directory, e.g. \"~/Documents/MyProject\"."]
+                        "repo_path": ["type": "string", "description": "Absolute or ~-relative path to the project's root directory, e.g. \"~/Documents/MyProject\". Must be a real, specific project directory the user actually meant — never a guess or a generic fallback like the home directory."]
                     ],
                     "required": ["task", "repo_path"]
                 ]
@@ -499,6 +501,19 @@ struct OpenAIClient {
         exploration within the same site is expected of you, not something to hesitate over. Only \
         stop and ask the user when you've genuinely run out of reasonable places to look, or the \
         request needs information only they have.
+
+        Never navigate to or open a calendar-feed/subscription URL (an .ics file, or a link whose \
+        path contains "feeds/calendar", "webcal", etc.) — that isn't a renderable webpage, so \
+        browser_navigate will just time out waiting for a page load that never fires, and opening \
+        it via open_url hands it off to a different app entirely (e.g. macOS Calendar) rather than \
+        showing you anything readable. If a page you're already on (e.g. a calendar view) doesn't \
+        show everything you need, use ITS OWN on-page navigation instead — next/previous-month \
+        links or buttons, pagination, date-range controls — via browser_click or by constructing \
+        the equivalent URL, and read each page's content directly with browser_get_page_text. Once \
+        you find a specific view that clearly shows what you need (e.g. an agenda/list view with \
+        titles and dates, vs. a compact month grid), stick with that same view type for every \
+        subsequent page in the sequence rather than switching between view types — switching adds \
+        extra steps without adding information, and this loop has a limited number of turns.
 
         When the goal is to find/show/search for videos, articles, or other content matching a \
         description (as opposed to opening one specific, uniquely identified item), a single \

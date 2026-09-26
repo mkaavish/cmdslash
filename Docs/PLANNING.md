@@ -336,6 +336,8 @@ Local-first by default: audit log, memory, and preferences live in local SQLite 
 
 CmdSlash's own API keys/tokens live in the macOS Keychain under its own service identifier — nothing else. It **never** reads Keychain items belonging to other apps, browser saved-password stores, or `.env`/credential files as part of task execution; the filesystem and terminal tools enforce a hard blocklist (`~/.ssh`, `~/.aws`, any path containing `.env`, `id_rsa*`, Keychain database files, and common credential-store paths) at the tool layer — this is a deny-list check the tool performs before touching a path, independent of whether the model "knows" not to.
 
+The specific credential held there is changing: currently a BYOK provider API key (`com.cmdslash.apikeys.openai`); under the managed-key pivot (§59) it becomes a CmdSlash account/session token instead, with the provider key living only in the backend. The Keychain-as-the-only-secret-store principle above is unaffected either way.
+
 ## 35. Memory
 
 Scoped narrowly for V1: learned preferences (default calendar, preferred browser, remapped hotkeys), a rolling task history (for "what did you just do" and light dedup — e.g., not re-creating a calendar event that already exists), and nothing resembling a persistent free-form profile of the user's behavior. Memory is inspectable and clearable from the UI.
@@ -590,6 +592,8 @@ Win the developer/power-user wedge first by being the fastest, most trustworthy 
 
 Freemium subscription: a free tier covering fast-path/low-risk actions on cheap models (enough to be genuinely useful for "open app/find file"-class tasks, functioning as the funnel); a Pro tier (~$20–30/mo) covering generous agentic/coding-agent usage; a bring-your-own-API-key option for power users who want unlimited usage on their own provider billing (a credible option specifically because this audience already has Anthropic/OpenAI API accounts from using coding agents). Team tier deferred until there's a team feature to sell.
 
+**Superseded by §59.** BYOK was reconsidered in favor of capturing real revenue from AI usage itself, not just a subscription fee sitting alongside a pass-through key the user pays the provider for directly — the tier structure (Basic/Student/Plus/Pro) still stands, but each tier's usage caps and margin now depend on CmdSlash's own metered backend rather than the user's own billing, per §59's plan.
+
 ## 52. AI/API Costs
 
 Rough order-of-magnitude, informing pricing rather than being precise: fast-path tasks (Haiku classification + one structured tool call) ≈ **$0.01–0.05** each. Agentic multi-step tasks without vision (Sonnet planning + a handful of tool calls + replans) ≈ **$0.10–$0.50** each. Tasks that escalate to vision fallback are meaningfully more expensive per call (image tokens) and should be rare by design (§25), not a routine cost center. Coding-agent tasks inherit Claude Code's own token economics for repo-sized context and iteration — comparable to a normal Claude Code session, roughly **$0.50–$5** depending on repo size and iteration count. These numbers argue for per-task soft cost caps and session-level cost tracking in the Model Router (§27) from day one, not added retroactively once a cost incident happens.
@@ -639,3 +643,82 @@ Not built in V1, but not architecturally foreclosed: the **tool protocol** (`Too
 ## 58. Long-Term Vision
 
 CmdSlash becomes the default way its users operate a computer at all for anything beyond the most trivial, single-glance actions — the layer between "I want X" and the dozen clicks X used to take, across every app, not just the ones with good APIs. The durable bet is that this layer has to be native, fast, and verification-first to earn the trust required to actually be used that way, and that starting from the hardest, highest-trust use case (a coding agent operating your actual repo) rather than the easiest demo (dictating a text message) is what makes the trust durable once it's earned.
+
+## 59. Managed API Key Backend (Monetization Pivot)
+
+**Supersedes §51's BYOK-inclusive framing and §34's Keychain-held-provider-key model.** The pricing conversation converged on wanting real revenue from AI usage itself, not just a subscription fee sitting alongside a pass-through BYOK key the user pays the provider for directly. This section plans the shift from "the app is a pure client hitting the provider's API directly" (§59.1, what exists today) to "the app talks to a CmdSlash-owned backend that meters and relays every request" (§59.2 onward). Not started; planning only.
+
+### 59.1 Current State
+
+What already exists and what this pivot actually touches, so the scope is concrete rather than hand-wavy:
+
+- `CmdSlash/Models/OpenAIClient.swift` calls `https://api.openai.com/v1/chat/completions` directly from the client, authenticated with a key read via `KeychainStore.readString(service: "com.cmdslash.apikeys.openai")` (§34's model). No server anywhere in the request path today.
+- All 15 action tools (§21), the fast-path/agentic-path split (§27-29), the risk/confirmation system (§30), and `confirm_batch_actions`' batched-confirmation flow (§29's own worked example already anticipated exactly this shape) are model-agnostic and untouched by this pivot — they operate on `OpenAIClient`'s `ToolCall`/`ClassificationResult`/`AgenticTurn` types, not on how the client reaches the model or who's paying for it.
+- `PersistenceStore` (SQLite, local-only, §39) already tracks every session's tool calls and outcomes on-device — a useful reference for the shape of usage data worth logging, but it's local and per-machine, not the durable per-account ledger a billing/metering system needs.
+- `BrowserBridgeServer` is the only existing example of this app speaking HTTP as a server (a local `Network.framework` listener the Chrome extension polls) — real in-house experience with the mechanics, but loopback-only, not a template for an internet-facing service.
+- Net: nothing server-side exists yet. This is new infrastructure, not a refactor of something partial. §26's model table and §27-29's routing text also still describe the pre-migration Claude Haiku/Sonnet stack rather than the current single-tier GPT-5.4-mini setup — a separate, smaller doc-accuracy fix, not part of this pivot's scope.
+
+### 59.2 Target Architecture
+
+```
+CmdSlash.app  →  Supabase Edge Function (relay)  →  OpenAI API
+  (Supabase auth       (checks the Postgres          (CmdSlash's own
+   token, in Keychain)  usage ledger, then            org key(s), held
+                        relays + logs cost)            as a function secret)
+```
+
+**Vendor decision: Supabase, for auth, database, and the relay itself — one platform, not split across vendors.** Supabase Auth issues the account/session token the app stores in Keychain in place of today's provider key. Supabase Postgres holds the usage ledger and each account's plan/cap. The relay logic (authenticate → check budget → call OpenAI → log cost → return) runs as a Supabase Edge Function, colocated with the Postgres ledger so every metered request reads/writes it with minimal added latency — no separate hosting vendor (Fly.io/Railway/Render considered and rejected specifically to avoid the integration glue and second-vendor operational burden of splitting auth/DB/compute across platforms, per §53 risk #9). Stripe webhooks (§59.3 item 4) land as just another Edge Function endpoint writing to the same DB. Open item to verify once Phase 1 actually starts: Supabase Edge Functions' current execution-time limit, against the agentic loop's multi-second per-call latency — if that ever binds, the fallback is a small dedicated relay service on Fly.io while keeping Supabase for auth/DB, not a reason to default to that complexity now.
+
+`OpenAIClient.swift` is rewritten to call the Supabase Edge Function endpoint instead of `api.openai.com` directly, authenticated with the Supabase session token instead of a provider key. The wire format the client sees can stay OpenAI-compatible (the same request/response JSON shape `OpenAIClient` already parses) — the relay is a thin, mostly-transparent proxy, so the client-side diff is smaller than it looks: swap the URL and the auth header, keep the rest. See §59.6 for the endpoint's concrete request/response contract.
+
+### 59.3 Required Components
+
+1. **Relay function.** A Supabase Edge Function, not a separate always-on service — its whole job is: authenticate the request → check the caller's remaining budget for this billing period → relay to OpenAI with the backend's own key → log actual token cost → return the response.
+2. **Auth.** Supabase Auth for account creation, login, and the long-lived-but-revocable token the app stores in Keychain in place of today's provider key — password resets, token rotation, and revocation correctness aren't worth re-deriving for a first version.
+3. **Usage metering & enforcement.** A per-account token/cost ledger in Supabase Postgres, keyed to the plan's monthly cap (§52's per-task cost estimates are the right starting unit — a fast-path call ≈$0.01–0.05, an agentic-loop call ≈$0.10–0.50 — logged per request, summed per billing cycle, reset on renewal). Enforcement has to happen *before* the relay call, not after, or a burst of requests can blow through a cap before the ledger catches up — needs either a fast pre-check against a cached running total, or an explicitly accepted small overage buffer rather than a fully synchronous distributed lock for a v1.
+4. **Billing integration.** Stripe (or equivalent) subscriptions per plan tier, webhook-driven (as an Edge Function endpoint) to keep each account's plan/cap in Postgres in sync with what they're actually paying for — a plan change or cancellation needs to update the enforced cap immediately, not on the app's next launch.
+5. **Client changes.** `OpenAIClient.swift`: swap the endpoint URL and auth header (as above). `KeychainStore`'s service identifier changes from `com.cmdslash.apikeys.openai` to something like `com.cmdslash.session`, holding a Supabase account token instead of a provider key. A real onboarding/login flow becomes mandatory rather than optional — §55 Phase 3 already lists "onboarding flow" as an open item; this pivot is what makes it load-bearing.
+
+### 59.4 Phased Build Order
+
+1. Backend skeleton + auth + a single unmetered relay endpoint — prove the pipe works end to end (app → backend → OpenAI → back) before layering enforcement logic on top of something unproven.
+2. Usage metering + cap enforcement — the part that actually controls the money; test against deliberately adversarial usage (rapid-fire requests, a request that would exceed the remaining budget mid-response) before trusting it.
+3. Stripe subscription integration + webhook-driven plan sync.
+4. Client migration: `OpenAIClient.swift` + Keychain service change + the new login/onboarding UI.
+5. Cutover: existing testers (currently on the direct-to-OpenAI BYOK key) migrate to a real account — the `com.cmdslash.apikeys.openai` Keychain entry becomes dead once this ships, not a fallback path to maintain indefinitely.
+
+### 59.5 Open Risks / Questions to Resolve Before Building
+
+- **Real COGS returns on every tier, not just a hypothetical free one.** The Student/Plus/Pro margin math from the pricing conversation assumed BYOK; it needs to be fully re-derived from §52's cost estimates against each plan's actual usage cap once CmdSlash is paying for every request — this is the single biggest input the whole pricing model depends on, and should be resolved before tier pricing is finalized, not after building the backend.
+- **Enforcement lag / abuse surface.** Any pre-check-then-relay design has some window where usage can slip past the cap before it's caught — needs an explicit accepted-loss policy stated up front (e.g. "we eat up to $X of overage before a hard cutoff"), not left implicit.
+- **Latency cost of the extra hop.** Every request now goes app → backend → OpenAI → backend → app instead of app → OpenAI directly — worth measuring against the <1s fast-path target (§54) once a real backend exists, since an added network hop is a real, measurable cost, not a rounding error.
+- **Ongoing operational burden.** A backend means uptime, on-call, and dependency risk (Stripe outage, auth-provider outage, the backend's own host having an incident) that didn't exist when the app was a pure client — §53 risk #9's "solo-developer systems-engineering bandwidth" concern now extends indefinitely into operations, not just initial build.
+
+### 59.6 Relay Endpoint Contract (Phase 1 shape)
+
+Designed so the request/response body is a pure pass-through of what `OpenAIClient.swift` already builds and parses today — the relay's job is authentication, budget-checking, and cost logging around that body, not reshaping it. This is what makes the client-side diff (§59.3 item 5) as small as it is.
+
+```
+POST https://<project>.supabase.co/functions/v1/chat-relay
+Authorization: Bearer <supabase-session-token>      (replaces today's "Bearer <openai-key>")
+Content-Type: application/json
+
+{
+  "model": "gpt-5.4-mini",
+  "max_completion_tokens": 256,          // 256 for fast-path, 1024 for the agentic loop — unchanged from today
+  "messages": [...],                     // unchanged: system message + conversation, exactly as sendRequest builds it
+  "tools": [...],                        // unchanged: the {type:"function", function:{...}} shape openAITools(from:) already produces
+  "tool_choice": "auto",
+  "parallel_tool_calls": false
+}
+```
+
+**Function-side flow:**
+1. Verify the Supabase session token (rejects with 401 if invalid/expired — same shape as today's "no API key" 401, `OpenAIClient.ClientError.httpError` already handles an arbitrary status/body).
+2. Look up the account's plan and current-billing-period spend from the Postgres ledger.
+3. Pre-check: classify the request by its declared `max_completion_tokens` (256 ≈ fast-path, 1024 ≈ agentic-loop turn) and compare a conservative cost estimate from §52's bands (≈$0.05 / ≈$0.50 respectively) against remaining budget. Reject with `402 Payment Required` and `{"error":{"message":"Monthly usage limit reached for your plan.","type":"budget_exceeded"}}` if it wouldn't fit — chosen so it lands in `OpenAIClient`'s existing `ClientError.httpError` path with no new client-side error type needed, though the message shown to the user is worth improving later (§59 doesn't require that for Phase 1).
+4. If within budget: forward the body verbatim to `api.openai.com/v1/chat/completions` using the backend's own key (a Supabase Edge Function secret, never exposed to the client).
+5. Read the real `usage` field OpenAI returns (`prompt_tokens`/`completion_tokens`) to compute *actual* cost — true up the ledger with this, not the step-3 estimate, since the estimate is only for the pre-check gate.
+6. Return OpenAI's response body unchanged. `OpenAIClient.message(from:)`, `toolCall(from:)`, and everything downstream of them need zero changes — they already parse exactly this shape.
+
+**Net client-side diff this implies for `OpenAIClient.swift`:** the request URL (`api.openai.com` → the Edge Function URL) and the `Authorization` header's source (Keychain-held OpenAI key → Keychain-held Supabase session token). `sendRequest`'s body-building, and `message(from:)`/`toolCall(from:)`'s response-parsing, are otherwise untouched.

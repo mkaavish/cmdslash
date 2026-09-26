@@ -437,11 +437,14 @@ final class OverlayViewModel {
     /// batched into one confirmation via confirm_batch_actions instead of interrupting repeatedly
     /// (§30) — `batchApprovedStepsRemaining` tracks how many subsequent risky calls that single
     /// approval covers. Capped at maxSteps so a confused loop fails loudly instead of running
-    /// forever; raised from the earlier single-action-typical 6 to 10 since a batch of several
-    /// actions plus the reads needed to determine them can genuinely need more turns.
+    /// forever; raised from the original single-action-typical 6, first to 10, then to 20 after
+    /// live-testing a real multi-month browser-extraction-then-batch-write task (Canvas → Calendar,
+    /// Docs/PLANNING.md §48 demo #6): reading 3 months of a paginated calendar page alone took 9
+    /// steps (navigate/click + read per month), leaving nothing left for the batch confirmation
+    /// and the actual calendar writes.
     private func runAgenticPath(goal: String, context: ContextSnapshot) async {
         var messages: [[String: Any]] = [["role": "user", "content": goal]]
-        let maxSteps = 10
+        let maxSteps = 20
         var batchApprovedStepsRemaining = 0
 
         for _ in 1...maxSteps {

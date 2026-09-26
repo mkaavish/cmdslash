@@ -17,6 +17,7 @@ struct CodingAgentTool {
 
     enum ToolError: Error, LocalizedError {
         case repoNotFound(String)
+        case notAGitRepository(String)
         case claudeNotFound
         case processFailed(Int32, String)
 
@@ -24,6 +25,11 @@ struct CodingAgentTool {
             switch self {
             case .repoNotFound(let path):
                 "No directory found at \(path)."
+            case .notAGitRepository(let path):
+                // Phrased for the model to read and act on (fed back as a tool result in the
+                // agentic loop), not just the user — this is the recovery instruction for
+                // exactly the failure mode it names.
+                "\"\(path)\" isn't a git repository. run_coding_agent only runs against a real, specific existing project — never a home directory or other non-project folder, even as a fallback. If this task doesn't actually involve editing code in an existing project, it needs a different tool entirely (browser, calendar, file tools), not this one."
             case .claudeNotFound:
                 "Claude Code CLI (`claude`) isn't installed or isn't on PATH."
             case .processFailed(let code, let output):
@@ -41,6 +47,15 @@ struct CodingAgentTool {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: expandedPath, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw ToolError.repoNotFound(repoPath)
+        }
+        // Structural guard, not just a prompt instruction: a real software project is virtually
+        // always git-tracked, and this directly targets the exact failure pattern seen live —
+        // the model repeatedly defaulting repo_path to "~" for tasks that were never coding tasks
+        // at all, each time requiring the user to approve a real high-risk confirmation before
+        // Claude Code actually ran against their home directory. Prompt wording alone didn't
+        // reliably prevent it; this makes the bad case impossible to execute regardless.
+        guard Self.isGitRepository(at: expandedPath) else {
+            throw ToolError.notAGitRepository(repoPath)
         }
         guard let claudeExecutable = Self.claudeCandidatePaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
             throw ToolError.claudeNotFound
@@ -87,6 +102,21 @@ struct CodingAgentTool {
         }
 
         return Result(output: output, repoPath: expandedPath, gitChangeSummary: Self.gitChangeSummary(inRepo: expandedPath))
+    }
+
+    private static func isGitRepository(at path: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["rev-parse", "--is-inside-work-tree"]
+        process.currentDirectoryURL = URL(fileURLWithPath: path)
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        guard (try? process.run()) != nil else { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
     }
 
     private static func gitChangeSummary(inRepo path: String) -> String? {
