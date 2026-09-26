@@ -681,11 +681,13 @@ CmdSlash.app  →  Supabase Edge Function (relay)  →  OpenAI API
 
 ### 59.4 Phased Build Order
 
-1. Backend skeleton + auth + a single unmetered relay endpoint — prove the pipe works end to end (app → backend → OpenAI → back) before layering enforcement logic on top of something unproven.
-2. Usage metering + cap enforcement — the part that actually controls the money; test against deliberately adversarial usage (rapid-fire requests, a request that would exceed the remaining budget mid-response) before trusting it.
-3. Stripe subscription integration + webhook-driven plan sync.
-4. Client migration: `OpenAIClient.swift` + Keychain service change + the new login/onboarding UI.
-5. Cutover: existing testers (currently on the direct-to-OpenAI BYOK key) migrate to a real account — the `com.cmdslash.apikeys.openai` Keychain entry becomes dead once this ships, not a fallback path to maintain indefinitely.
+1. ✅ **Done.** Backend skeleton + auth + relay endpoint (`supabase/functions/chat-relay`) — Supabase project created, schema migrated, function deployed, verified live against a real test account (session auth, RLS, a real OpenAI response relayed through).
+2. ✅ **Done.** Usage metering + cap enforcement shipped as part of the same first version, not deferred — verified live in both directions: an under-budget request succeeds and logs real cost (confirmed against OpenAI's actual `gpt-5.4-mini` pricing, $0.75/M input + $4.50/M output, looked up directly against OpenAI's own docs rather than guessed), and a request against a $0 cap is rejected with `402` *before* ever reaching OpenAI (confirmed via the ledger gaining no new row).
+3. ⬜ **Not started.** Stripe subscription integration + webhook-driven plan sync.
+4. ✅ **Done.** Client migration: `OpenAIClient.swift` now calls the relay instead of `api.openai.com` directly, with Supabase-session refresh handling (a rotating refresh token in Keychain, a fresh access token minted per request — see the type's own doc comment for why). Verified live through the actual macOS app, not just `curl`: a real ⌘/ command produced a new, correctly-costed row in the usage ledger. **The new login/onboarding UI this item originally bundled in is NOT done** — the current session was seeded into Keychain manually (the same way the BYOK key used to be), since there's no way yet for a user to actually sign in from within the app.
+5. ⬜ **Not started.** Cutover: existing testers migrate to a real account. The `com.cmdslash.apikeys.openai` Keychain entry is already dead code (nothing reads it anymore) but nothing has been done to clean it up or migrate any other tester off it.
+
+**Remaining for a real launch:** Stripe (item 3) and an actual login/signup UI (the still-open half of item 4) are the two blocking gaps — right now the only way to use the app at all is a manually-seeded test account's refresh token in Keychain.
 
 ### 59.5 Open Risks / Questions to Resolve Before Building
 
