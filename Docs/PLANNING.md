@@ -592,7 +592,7 @@ Win the developer/power-user wedge first by being the fastest, most trustworthy 
 
 Freemium subscription: a free tier covering fast-path/low-risk actions on cheap models (enough to be genuinely useful for "open app/find file"-class tasks, functioning as the funnel); a Pro tier (~$20–30/mo) covering generous agentic/coding-agent usage; a bring-your-own-API-key option for power users who want unlimited usage on their own provider billing (a credible option specifically because this audience already has Anthropic/OpenAI API accounts from using coding agents). Team tier deferred until there's a team feature to sell.
 
-**Superseded by §59.** BYOK was reconsidered in favor of capturing real revenue from AI usage itself, not just a subscription fee sitting alongside a pass-through key the user pays the provider for directly — the tier structure (Basic/Student/Plus/Pro) still stands, but each tier's usage caps and margin now depend on CmdSlash's own metered backend rather than the user's own billing, per §59's plan.
+**Superseded by §59.** BYOK was reconsidered in favor of capturing real revenue from AI usage itself, not just a subscription fee sitting alongside a pass-through key the user pays the provider for directly — the tier structure (Basic/Student/Plus/Pro) still stands, and each tier's usage caps and margin now depend on CmdSlash's own metered backend rather than the user's own billing. Final prices and AI budgets are confirmed in §60.1: $0.99/$4.99/$9.99/$19.99 per month (annual options at a 20% discount), with each tier's AI spending cap fixed at 10/20/25/30% of that tier's revenue.
 
 ## 52. AI/API Costs
 
@@ -683,7 +683,7 @@ CmdSlash.app  →  Supabase Edge Function (relay)  →  OpenAI API
 
 1. ✅ **Done.** Backend skeleton + auth + relay endpoint (`supabase/functions/chat-relay`) — Supabase project created, schema migrated, function deployed, verified live against a real test account (session auth, RLS, a real OpenAI response relayed through).
 2. ✅ **Done.** Usage metering + cap enforcement shipped as part of the same first version, not deferred — verified live in both directions: an under-budget request succeeds and logs real cost (confirmed against OpenAI's actual `gpt-5.4-mini` pricing, $0.75/M input + $4.50/M output, looked up directly against OpenAI's own docs rather than guessed), and a request against a $0 cap is rejected with `402` *before* ever reaching OpenAI (confirmed via the ledger gaining no new row).
-3. ⬜ **Not started.** Stripe subscription integration + webhook-driven plan sync.
+3. ⬜ **Not started.** Stripe subscription integration + webhook-driven plan sync — full plan in §60.
 4. ✅ **Done, including the login UI.** Client migration: `OpenAIClient.swift` now calls the relay instead of `api.openai.com` directly, with Supabase-session refresh handling (a rotating refresh token in Keychain, a fresh access token minted per request — see the type's own doc comment for why). A real sign-in/sign-up window (`CmdSlash/Auth/`) now exists too — a dedicated `NSWindow`, not the ⌘/ overlay, shown on launch when no session exists (a soft gate, not modal) and reachable anytime via the status-bar menu's Sign In.../Sign Out items. Verified live through the actual macOS app end to end: signed out, signed back in through the new UI with the test account, and confirmed ⌘/ still worked afterward with a correctly-costed new row in the usage ledger.
 5. ⬜ **Not started.** Cutover: existing testers migrate to a real account. The `com.cmdslash.apikeys.openai` Keychain entry is already dead code (nothing reads it anymore) but nothing has been done to clean it up or migrate any other tester off it.
 
@@ -691,7 +691,7 @@ CmdSlash.app  →  Supabase Edge Function (relay)  →  OpenAI API
 
 ### 59.5 Open Risks / Questions to Resolve Before Building
 
-- **Real COGS returns on every tier, not just a hypothetical free one.** The Student/Plus/Pro margin math from the pricing conversation assumed BYOK; it needs to be fully re-derived from §52's cost estimates against each plan's actual usage cap once CmdSlash is paying for every request — this is the single biggest input the whole pricing model depends on, and should be resolved before tier pricing is finalized, not after building the backend.
+- ~~**Real COGS returns on every tier, not just a hypothetical free one.**~~ **Resolved — see §60.1.** Final prices and AI budgets are set as a fixed percentage of each tier's revenue (10/20/25/30%), not derived from BYOK-era assumptions.
 - **Enforcement lag / abuse surface.** Any pre-check-then-relay design has some window where usage can slip past the cap before it's caught — needs an explicit accepted-loss policy stated up front (e.g. "we eat up to $X of overage before a hard cutoff"), not left implicit.
 - **Latency cost of the extra hop.** Every request now goes app → backend → OpenAI → backend → app instead of app → OpenAI directly — worth measuring against the <1s fast-path target (§54) once a real backend exists, since an added network hop is a real, measurable cost, not a rounding error.
 - **Ongoing operational burden.** A backend means uptime, on-call, and dependency risk (Stripe outage, auth-provider outage, the backend's own host having an incident) that didn't exist when the app was a pure client — §53 risk #9's "solo-developer systems-engineering bandwidth" concern now extends indefinitely into operations, not just initial build.
@@ -724,3 +724,115 @@ Content-Type: application/json
 6. Return OpenAI's response body unchanged. `OpenAIClient.message(from:)`, `toolCall(from:)`, and everything downstream of them need zero changes — they already parse exactly this shape.
 
 **Net client-side diff this implies for `OpenAIClient.swift`:** the request URL (`api.openai.com` → the Edge Function URL) and the `Authorization` header's source (Keychain-held OpenAI key → Keychain-held Supabase session token). `sendRequest`'s body-building, and `message(from:)`/`toolCall(from:)`'s response-parsing, are otherwise untouched.
+
+## 60. Stripe Subscription Integration
+
+Detailed plan for §59.4 item 3, the last blocking gap before a real launch: today every account gets the schema's default `monthly_cap_cents` (60, i.e. $0.60/mo) regardless of what anyone pays, because nothing writes a different value. This section makes `plan`/`monthly_cap_cents` in `profiles` actually reflect a paid subscription.
+
+### 60.1 Tier Prices and Caps (confirmed)
+
+§59.5's open margin-math question is now resolved — caps below are set as a fixed percentage of each tier's monthly revenue (10%/20%/25%/30% as the tier rises, leaving more margin on the free tier where abuse risk is highest and thinner margin on paid tiers where the subscription fee itself is the primary revenue). **Note this changes the Basic default from the schema's current 60 to 10** — a follow-up to the `plan_limits` seed migration (§60.3) needs to also update the existing `profiles` table default and backfill any already-created Basic rows.
+
+| Plan | Monthly | Annual (renews at) | `monthly_cap_cents` | AI budget | % of monthly revenue | Suggested per-task max |
+|---|---|---|---|---|---|---|
+| Basic (free trial tier) | $0.99/mo | $9.99/yr | 10 ($0.10) | $0.10 | 10% | $0.02 |
+| Student | $4.99/mo | $47.99/yr | 100 ($1.00) | $1.00 | 20% | $0.15 |
+| Plus | $9.99/mo | $95.99/yr | 250 ($2.50) | $2.50 | 25% | $0.40 |
+| Pro | $19.99/mo | $191.99/yr | 600 ($6.00) | $6.00 | 30% | $1.00 |
+
+Two things called out in the source pricing work that this plan should carry forward but that aren't built yet:
+- **Basic commands (open app/file/URL, window management, predefined Mac actions) should run locally and never touch `monthly_cap_cents` at all** — only AI agent commands (coding, reasoning, document analysis, autonomous workflows) are metered. `chat-relay`'s budget check already only fires when the client calls it at all, so as long as basic commands stay client-local (no LLM call) this is already true today; worth a explicit regression check once Stripe caps start actually mattering to someone's wallet, since a bug here would silently eat into a paying user's budget for actions that shouldn't cost anything.
+- **Per-task maximum** (last column) is a *second*, per-request ceiling on top of the monthly cap — stops one runaway agentic task from consuming a whole month's budget in one shot. `chat-relay`'s current pre-check (§59.6 step 3) only compares an estimated cost against *remaining monthly budget*; it doesn't yet cap a single task independently. Adding this is a small addition to that same pre-check (reject if `estimatedCost > perTaskMaxCents`, independent of remaining budget) — worth doing alongside the Stripe work since both touch the same function, but it's not Stripe-specific and could ship on its own first if useful sooner.
+
+Annual pricing is a straightforward second Stripe Price per plan (§60.4) — the plumbing (checkout/webhook/schema) is identical for monthly vs. annual, Stripe just reports a different `interval` on the subscription, which the webhook doesn't need to branch on since it re-derives `plan`/`monthly_cap_cents` from the Price ID either way, not from the interval. Not building the "first year" promotional discount from the screenshots into this plan (yet) — that's a Stripe Coupon/Promotion Code layered on top of the base annual Price, orthogonal to the integration itself, worth adding when there's an actual launch-promo decision to make.
+
+### 60.2 Why Checkout-in-Browser, Not In-App Payment UI
+
+CmdSlash is a native macOS app with no web frontend, and Stripe's own PCI-scope reduction depends on card data never touching code we run. Building a native card-entry form would mean handling PCI scope directly for no real benefit. Instead: the app asks a backend Edge Function for a Stripe-hosted Checkout URL and opens it with `NSWorkspace.shared.open(url)` — the user pays in their default browser using a page Stripe fully owns (autofill, Apple Pay, saved cards all work for free), and the app never sees card data at all. Same approach for plan changes/cancellation via Stripe's hosted Billing Portal, so CmdSlash never has to build its own "change plan" UI either.
+
+### 60.3 Schema Changes
+
+New migration, additive plus one default correction (no changes to existing columns `usage_events`/`current_period_usage` already rely on):
+
+```sql
+alter table public.profiles
+  add column stripe_customer_id text unique,
+  add column stripe_subscription_id text unique,
+  add column subscription_status text, -- Stripe's own status strings: active, past_due, canceled, etc.
+  alter column monthly_cap_cents set default 10; -- was 60 — corrected to match §60.1's confirmed Basic cap ($0.10)
+
+-- Backfill: any profile still sitting at the old 60-cent default (i.e. nobody has manually
+-- changed it) moves to the new 10-cent Basic cap. Anyone already upgraded via Stripe by the
+-- time this runs is untouched, since the webhook (§60.5) will have already set their real value.
+update public.profiles set monthly_cap_cents = 10 where monthly_cap_cents = 60 and plan = 'basic';
+
+-- Single source of truth for what each plan grants, so the webhook handler and any future
+-- pricing-page code both read the same numbers instead of hardcoding them twice. Two Stripe
+-- Price IDs per paid plan (monthly vs. annual, §60.1) map to the same plan/caps — the webhook
+-- looks up plan_limits by whichever Price ID the subscription actually used.
+create table public.plan_limits (
+  plan text primary key,
+  monthly_cap_cents numeric(10, 4) not null,
+  per_task_max_cents numeric(10, 4) not null,
+  stripe_price_id_monthly text, -- null for 'basic' (no Stripe object — it's free)
+  stripe_price_id_annual text
+);
+
+insert into public.plan_limits (plan, monthly_cap_cents, per_task_max_cents, stripe_price_id_monthly, stripe_price_id_annual) values
+  ('basic', 10, 2, null, null),
+  ('student', 100, 15, 'price_...', 'price_...'),   -- filled in after creating the Stripe Prices (§60.4)
+  ('plus', 250, 40, 'price_...', 'price_...'),
+  ('pro', 600, 100, 'price_...', 'price_...');
+```
+
+No RLS-visible change needed beyond what `profiles_select_own` already grants — a user can already read their own `plan`; `stripe_customer_id`/`subscription_id` ride along under the same policy (harmless to expose to the row's owner) and are only ever written by the webhook handler via the service-role client, same pattern as `usage_events` today.
+
+### 60.4 Stripe-Side Setup (test mode first)
+
+1. Create Products for Student/Plus/Pro in the Stripe Dashboard (test mode), each with two recurring Prices — monthly and annual, per §60.1's confirmed numbers — Basic needs no Stripe object since it's free.
+2. Copy each Price ID into `plan_limits.stripe_price_id_monthly`/`stripe_price_id_annual` (§60.3).
+3. Enable the Customer Portal (Stripe Dashboard → Billing → Customer Portal), with monthly↔annual switching allowed if the Portal supports it for these products, so §60.5's `create-portal-session` covers plan and billing-interval changes without custom UI.
+
+### 60.5 New Edge Functions
+
+Three new functions alongside `chat-relay`, all under `supabase/functions/`:
+
+- **`create-checkout-session`** — authenticated (same Supabase-session verification as `chat-relay`), takes `{ "plan": "student"|"plus"|"pro", "interval": "monthly"|"annual" }`. Looks up or creates a Stripe Customer for the caller (stores the id back to `profiles.stripe_customer_id` on first creation), creates a Stripe Checkout Session for `plan_limits.stripe_price_id_monthly` or `_annual` (whichever `interval` selects) with `success_url`/`cancel_url` pointing at a custom URL scheme (§60.7), returns `{ "url": "https://checkout.stripe.com/..." }`.
+- **`create-portal-session`** — authenticated, looks up the caller's `stripe_customer_id` (404s with a clear message if they have no subscription yet — Basic-tier users see "Upgrade" not "Manage" in the UI, per §60.7), creates a Billing Portal session, returns `{ "url": "https://billing.stripe.com/..." }`.
+- **`stripe-webhook`** — **not** authenticated via Supabase session (Stripe calls this directly); instead verifies the `Stripe-Signature` header against `STRIPE_WEBHOOK_SECRET` using Stripe's SDK, rejecting anything that doesn't verify. Handles, using the service-role client (bypasses RLS, same pattern as `chat-relay`'s cost logging):
+  - `checkout.session.completed` — read `client_reference_id` (set to the Supabase user id when creating the session) and `subscription`, write `stripe_subscription_id`, `subscription_status = 'active'`, and `plan`/`monthly_cap_cents` (looked up from `plan_limits` by matching the subscription's Price ID against either `stripe_price_id_monthly` or `_annual`) to `profiles`.
+  - `customer.subscription.updated` — plan changes (upgrade/downgrade or monthly↔annual switch via the Portal) and status changes (e.g. `past_due`) land here; re-derive `plan`/`monthly_cap_cents` from the subscription's current Price ID (whichever column it matches) and update `subscription_status`.
+  - `customer.subscription.deleted` — cancellation; reset to Basic (`plan = 'basic'`, `monthly_cap_cents` from `plan_limits`, `subscription_status = 'canceled'`).
+  - Idempotency: Stripe retries webhook deliveries, so handlers must be safe to run twice for the same event — upsert on `stripe_subscription_id` rather than assuming "first time seeing this."
+- **`chat-relay` update (small, piggybacks on this work)** — add the per-task ceiling from §60.1: read `plan_limits.per_task_max_cents` for the caller's plan and reject with the same `402 budget_exceeded` shape if the step-3 cost estimate alone exceeds it, independent of remaining monthly budget. One extra lookup in a function that already reads `profiles`/`current_period_usage` per request.
+
+New secrets (`supabase secrets set`, same mechanism already used for `OPENAI_API_KEY`): `STRIPE_SECRET_KEY` (test-mode to start), `STRIPE_WEBHOOK_SECRET` (from the Dashboard once the webhook endpoint is registered).
+
+### 60.6 Billing-Period Alignment (carried-forward simplification)
+
+`current_period_usage` (§59.3) already tracks spend by **calendar month**, not by each subscription's actual renewal date — that mismatch was already accepted as a v1 simplification before Stripe existed, and this section doesn't change it: a cap resets on the 1st for everyone regardless of when they subscribed, not on their monthly anniversary. Worth revisiting only if it causes real user confusion ("I just paid but my cap didn't reset"), not before.
+
+### 60.7 macOS App Changes
+
+- **`AccountView`**: when `plan == "basic"`, show a monthly/annual toggle (mirroring the pricing page) plus an "Upgrade" button per paid tier (three buttons, Student/Plus/Pro); when on a paid plan, show "Manage Subscription" instead — plan/interval changes happen in the Portal, not a second in-app picker. Each button calls the relevant Edge Function (`SupabaseSession` gains `createCheckoutSession(plan:interval:)`/`createPortalSession()`, following the existing `getJSON`/access-token pattern), then `NSWorkspace.shared.open(url)` with the returned URL.
+- **Return-to-app after checkout**: register a custom URL scheme (`cmdslash://`) in Info.plist; Stripe's `success_url` points at `cmdslash://billing-success`. `AppDelegate` implements `application(_:open:)` (via `NSAppleEventManager` for `kAEGetURL`, the standard pre-`NSApplicationDelegate.application(_:open:)` mechanism for custom schemes on macOS) to bring the companion window to front and call `fetchAccountInfo()` again — the webhook usually beats the redirect back, but if it hasn't yet, a manual "Refresh" affordance in `AccountView` covers the gap rather than the UI silently showing stale data.
+- **`SupabaseSession.AccountInfo`** already carries `plan`/`monthlyCapCents`; no shape change needed, just new values flowing through once the webhook writes them.
+
+### 60.8 Phased Build Order
+
+1. ✅ **Done.** Tier prices/caps confirmed (§60.1): $0.99/$4.99/$9.99/$19.99 monthly (matching annual with a 20% discount), AI budgets at 10/20/25/30% of revenue, per-task ceilings.
+2. ⬜ Stripe account + test-mode Products, each with a monthly and annual Price; Customer Portal enabled (§60.4).
+3. ⬜ Migration: `profiles` columns + corrected Basic default + `plan_limits` table (two Price IDs and a per-task max per plan), seeded (§60.3).
+4. ⬜ `create-checkout-session` + `create-portal-session` Edge Functions; verify by hand with `curl` against a test account before touching the app.
+5. ⬜ `stripe-webhook` Edge Function + registered endpoint (Stripe Dashboard, or `stripe listen --forward-to` for local testing); verify each event type with Stripe CLI's `stripe trigger <event>` against a test subscription, confirming `profiles` updates correctly and idempotently (fire the same event twice).
+6. ⬜ `chat-relay`'s per-task ceiling check (§60.5's last bullet).
+7. ⬜ macOS: `AccountView` upgrade/manage buttons with monthly/annual toggle, `SupabaseSession` methods, custom URL scheme + `AppDelegate` handling.
+8. ⬜ End-to-end live test in Stripe test mode: subscribe with a test card (each interval) → `profiles.plan` updates → new cap reflected in `AccountView` and enforced by `chat-relay` (both the monthly cap and the per-task ceiling) → cancel via Portal → downgrades to Basic.
+9. ⬜ Switch `STRIPE_SECRET_KEY`/webhook endpoint to live mode; real card required from here on.
+
+### 60.9 Open Risks
+
+- **Webhook delivery gaps.** If the webhook endpoint is briefly down, Stripe retries for a while but not forever — worth periodically reconciling `profiles.subscription_status` against Stripe's own record (a scheduled function) rather than trusting webhooks are the only source of truth, though not required for a first version.
+- **Failed payments.** `invoice.payment_failed` isn't handled in §60.5's first pass — decide the policy (grace period before downgrading vs. immediate) before launch, not after the first real failed card.
+- **Tax.** Stripe Tax isn't enabled in this plan — fine for an initial launch, but worth flagging before this scales past a hobby-revenue level.
+- **Refunds/proration on plan changes.** The Billing Portal handles proration by Stripe's own default rules; no custom logic planned here — acceptable unless real usage surfaces a case that needs overriding.
