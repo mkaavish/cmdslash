@@ -74,4 +74,19 @@ enum KeychainStore {
             throw KeychainError.osStatus(updateStatus)
         }
     }
+
+    /// Needed for sign-out (§59) — succeeds even if nothing was there to delete, since "no
+    /// session" is the desired end state either way, not an error case the caller needs to
+    /// special-case.
+    static func delete(service: String, account: String = NSUserName()) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.osStatus(status)
+        }
+    }
 }

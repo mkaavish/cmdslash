@@ -74,9 +74,11 @@ struct OpenAIClient {
     private static let supabaseURL = "https://zwyakbxgdjplsqoxhnpy.supabase.co"
     private static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eWFrYnhnZGpwbHNxb3hobnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0MzgwMjIsImV4cCI6MjEwNjAxNDAyMn0.VtjDXwLyZIvfMKoA5tYpufW0AnGRrJSkL0fTaJjzJHE"
     private static let relayURL = "\(supabaseURL)/functions/v1/chat-relay"
-    /// Holds the Supabase refresh token, not an access token — access tokens are minted fresh
-    /// per request instead of cached (see the type-level doc comment above).
-    private static let sessionKeychainService = "com.cmdslash.session.refreshToken"
+    /// Not private: `SupabaseAuthClient` (writes the refresh token here on sign-in/sign-up) and
+    /// `AppDelegate` (checks for its presence to decide whether to show the sign-in window, and
+    /// deletes it on sign-out) both need the same service identifier — one source of truth
+    /// rather than three copies of the string that could drift.
+    static let sessionKeychainService = "com.cmdslash.session.refreshToken"
 
     private let model: String
 
