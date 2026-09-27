@@ -9,13 +9,10 @@ import os
 /// request shape, not an architecture change. Single model tier by design (unlike the old
 /// Haiku/Sonnet split): one model handles both the fast path and the agentic loop.
 ///
-/// Auth is a Supabase session, not a static provider key: the Keychain holds a refresh token
-/// (§59.3 item 5), and every request first exchanges it for a fresh access token via
-/// `refreshAccessToken()` — simpler than tracking each access token's own ~1hr expiry client-side,
-/// at the cost of one extra HTTP round-trip per request (acceptable; dominated by the LLM call's
-/// own latency regardless). Supabase rotates the refresh token on every use, so the response's
-/// replacement is written back to Keychain each time — failing to persist it would strand the
-/// session after exactly one more successful call.
+/// Auth is a Supabase session, not a static provider key — every request first exchanges the
+/// Keychain-held refresh token for a fresh access token via `SupabaseSession.refreshAccessToken()`
+/// (shared with `SupabaseAuthClient` and the companion window's Account section, not duplicated
+/// here — see that type for the rotation/expiry handling).
 ///
 /// NOTE: "gpt-5.4-mini" below has been confirmed against a live call through the relay (§59
 /// Phase 1 verification) — a real, valid model identifier, not a guess.
@@ -45,10 +42,11 @@ struct OpenAIClient {
         let finalText: String?
     }
 
+    // Session-refresh failures surface as SupabaseSession.SessionError directly (it already has
+    // its own clear, user-facing message) rather than being wrapped into this type.
     enum ClientError: Error, LocalizedError {
         case httpError(Int, String)
         case invalidResponse
-        case sessionExpired
 
         var errorDescription: String? {
             switch self {
@@ -56,29 +54,13 @@ struct OpenAIClient {
                 "CmdSlash relay returned \(code): \(body.prefix(300))"
             case .invalidResponse:
                 "Couldn't parse the relay's response."
-            case .sessionExpired:
-                // No login UI exists yet (§59.3 item 5 is still open) — until it does, this is
-                // the honest thing to say rather than a generic "please sign in" that has nowhere
-                // to send the user.
-                "Your CmdSlash session couldn't be refreshed — it may have expired or been revoked. A fresh refresh token needs to be added to Keychain again until sign-in is built."
             }
         }
     }
 
     private static let logger = Logger(subsystem: "com.cmdslash.CmdSlash", category: "OpenAIClient")
 
-    /// Public by Supabase's own design — meant to be embedded in client apps, protected by RLS
-    /// rather than secrecy (Docs/PLANNING.md §59.2's vendor-decision note covers this
-    /// distinction). Never the service role key, which stays server-side only, in the relay
-    /// function's own secrets.
-    private static let supabaseURL = "https://zwyakbxgdjplsqoxhnpy.supabase.co"
-    private static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eWFrYnhnZGpwbHNxb3hobnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0MzgwMjIsImV4cCI6MjEwNjAxNDAyMn0.VtjDXwLyZIvfMKoA5tYpufW0AnGRrJSkL0fTaJjzJHE"
-    private static let relayURL = "\(supabaseURL)/functions/v1/chat-relay"
-    /// Not private: `SupabaseAuthClient` (writes the refresh token here on sign-in/sign-up) and
-    /// `AppDelegate` (checks for its presence to decide whether to show the sign-in window, and
-    /// deletes it on sign-out) both need the same service identifier — one source of truth
-    /// rather than three copies of the string that could drift.
-    static let sessionKeychainService = "com.cmdslash.session.refreshToken"
+    private static let relayURL = "\(SupabaseSession.supabaseURL)/functions/v1/chat-relay"
 
     private let model: String
 
@@ -645,7 +627,7 @@ struct OpenAIClient {
             "parallel_tool_calls": false
         ]
 
-        let accessToken = try await Self.refreshAccessToken()
+        let accessToken = try await SupabaseSession.refreshAccessToken()
 
         var request = URLRequest(url: URL(string: Self.relayURL)!)
         request.httpMethod = "POST"
@@ -672,34 +654,6 @@ struct OpenAIClient {
             throw ClientError.invalidResponse
         }
         return json
-    }
-
-    /// Exchanges the Keychain-stored refresh token for a fresh access token. Supabase rotates the
-    /// refresh token on every use — the response's replacement is written back to Keychain before
-    /// returning, since losing it would strand the session after this one call.
-    private static func refreshAccessToken() async throws -> String {
-        let refreshToken = try KeychainStore.readString(service: sessionKeychainService)
-
-        var request = URLRequest(url: URL(string: "\(supabaseURL)/auth/v1/token?grant_type=refresh_token")!)
-        request.httpMethod = "POST"
-        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard
-            let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let accessToken = json["access_token"] as? String,
-            let newRefreshToken = json["refresh_token"] as? String
-        else {
-            let responseBody = String(data: data, encoding: .utf8) ?? "<no body>"
-            logger.error("Session refresh failed: \(responseBody, privacy: .public)")
-            throw ClientError.sessionExpired
-        }
-
-        try KeychainStore.writeString(newRefreshToken, service: sessionKeychainService)
-        return accessToken
     }
 
     private static func message(from json: [String: Any]) throws -> [String: Any] {

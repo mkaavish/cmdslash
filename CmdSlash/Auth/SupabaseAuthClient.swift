@@ -1,9 +1,9 @@
 import Foundation
 
 /// Thin client for Supabase's Auth REST API — sign-up and password sign-in, storing the
-/// resulting refresh token in Keychain under the same service `OpenAIClient`'s session-refresh
-/// logic already reads from (Docs/PLANNING.md §59). Deliberately separate from `OpenAIClient`:
-/// that type only ever refreshes an *existing* session, it never establishes one.
+/// resulting refresh token via `SupabaseSession` (Docs/PLANNING.md §59). Deliberately separate
+/// from `SupabaseSession`/`OpenAIClient`: this type *establishes* a session, they only ever
+/// refresh an existing one.
 struct SupabaseAuthClient {
     enum AuthError: Error, LocalizedError {
         case requestFailed(String)
@@ -21,11 +21,6 @@ struct SupabaseAuthClient {
             }
         }
     }
-
-    // Same public, by-design-embeddable values OpenAIClient uses (Docs/PLANNING.md §59.2's
-    // vendor-decision note covers why the anon key is safe here, unlike the service role key).
-    private static let supabaseURL = "https://zwyakbxgdjplsqoxhnpy.supabase.co"
-    private static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eWFrYnhnZGpwbHNxb3hobnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0MzgwMjIsImV4cCI6MjEwNjAxNDAyMn0.VtjDXwLyZIvfMKoA5tYpufW0AnGRrJSkL0fTaJjzJHE"
 
     func signUp(email: String, password: String) async throws {
         let (data, response) = try await Self.post(
@@ -61,13 +56,13 @@ struct SupabaseAuthClient {
         else {
             throw AuthError.invalidResponse
         }
-        try KeychainStore.writeString(refreshToken, service: OpenAIClient.sessionKeychainService)
+        try KeychainStore.writeString(refreshToken, service: SupabaseSession.keychainService)
     }
 
     private static func post(path: String, body: [String: String]) async throws -> (Data, URLResponse) {
-        var request = URLRequest(url: URL(string: "\(supabaseURL)\(path)")!)
+        var request = URLRequest(url: URL(string: "\(SupabaseSession.supabaseURL)\(path)")!)
         request.httpMethod = "POST"
-        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue(SupabaseSession.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await URLSession.shared.data(for: request)
