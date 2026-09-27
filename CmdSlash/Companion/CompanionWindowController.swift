@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The full companion app window — sign-in/account status today, settings/connectors later
-/// (Docs/PLANNING.md §59). Distinct from the ⌘/ overlay: this is a deliberate, pinnable app
-/// surface, not a glanceable quick-command bar.
+/// The full companion app window — Account and Settings today, Connectors planned next
+/// (`CompanionView` owns the sidebar between them; Docs/PLANNING.md §59). Distinct from the ⌘/
+/// overlay: this is a deliberate, pinnable app surface, not a glanceable quick-command bar.
 ///
 /// Toggles the app's Dock presence while open — the standard technique for a menu-bar-only
 /// (`LSUIElement`) app to also offer a normal, pinnable window (same approach utilities like
@@ -24,9 +24,9 @@ final class CompanionWindowController: NSObject, NSWindowDelegate {
 
         NSApp.setActivationPolicy(.regular)
 
-        let hosting = NSHostingView(rootView: AccountView())
+        let hosting = NSHostingView(rootView: CompanionView())
         let newWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
