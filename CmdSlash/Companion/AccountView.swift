@@ -57,9 +57,13 @@ struct AccountView: View {
                     labeledRow("Email", accountInfo.email)
                     labeledRow("Plan", accountInfo.plan.capitalized)
 
-                    let usedDollars = accountInfo.spentCents / 100
-                    let capDollars = accountInfo.monthlyCapCents / 100
-                    labeledRow("Usage this month", String(format: "$%.4f of $%.2f", usedDollars, capDollars))
+                    labeledRow(
+                        "Usage this month",
+                        "\(accountInfo.totalTokens.formatted()) of ~\(estimatedTokenCap(accountInfo).formatted()) tokens"
+                    )
+                    // Still proportional to the actual (cost-based) enforced cap, not the
+                    // estimated token figure above — the real enforcement in chat-relay is
+                    // cost-based, this display is just a friendlier unit for a human to read.
                     ProgressView(value: min(accountInfo.spentCents / max(accountInfo.monthlyCapCents, 0.01), 1))
                 }
             }
@@ -75,6 +79,19 @@ struct AccountView: View {
             Spacer()
             Text(value).fontWeight(.medium)
         }
+    }
+
+    /// The enforced cap is cost-based (chat-relay checks cents, not tokens — Docs/PLANNING.md
+    /// §59.6), and input/output tokens cost very differently ($0.000075 vs. $0.00045/token per
+    /// the relay's own rates), so there's no single fixed dollars-per-token conversion that's
+    /// correct for everyone. Derived from this account's own actual spend-to-tokens ratio so far,
+    /// so it reflects their real usage mix rather than an assumed blend — falls back to the
+    /// gpt-5.4-mini input rate (the cheaper, higher-volume side of a typical request) before any
+    /// usage exists to derive a real ratio from.
+    private func estimatedTokenCap(_ info: SupabaseSession.AccountInfo) -> Int {
+        let centsPerToken = info.totalTokens > 0 ? info.spentCents / Double(info.totalTokens) : 0.000075
+        guard centsPerToken > 0 else { return 0 }
+        return Int(info.monthlyCapCents / centsPerToken)
     }
 
     private func loadAccountInfo() async {

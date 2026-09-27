@@ -39,6 +39,7 @@ enum SupabaseSession {
         let plan: String
         let monthlyCapCents: Double
         let spentCents: Double
+        let totalTokens: Int
     }
 
     static func hasStoredSession() -> Bool {
@@ -90,7 +91,7 @@ enum SupabaseSession {
 
         async let userJSON = getJSON(path: "/auth/v1/user", accessToken: accessToken)
         async let profileJSON = getJSON(path: "/rest/v1/profiles?select=plan,monthly_cap_cents", accessToken: accessToken)
-        async let usageJSON = getJSON(path: "/rest/v1/current_period_usage?select=spent_cents", accessToken: accessToken)
+        async let usageJSON = getJSON(path: "/rest/v1/current_period_usage?select=spent_cents,total_tokens", accessToken: accessToken)
 
         let (user, profiles, usageRows) = try await (userJSON, profileJSON, usageJSON)
 
@@ -104,9 +105,11 @@ enum SupabaseSession {
         let cap = numeric(profile["monthly_cap_cents"])
         // No usage row yet (a brand-new account with zero requests this period) isn't an error —
         // current_period_usage only has a row once at least one usage_events entry exists.
-        let spent = numeric((usageRows as? [[String: Any]])?.first?["spent_cents"])
+        let usageRow = (usageRows as? [[String: Any]])?.first
+        let spent = numeric(usageRow?["spent_cents"])
+        let tokens = Int(numeric(usageRow?["total_tokens"]))
 
-        return AccountInfo(email: email, plan: plan, monthlyCapCents: cap, spentCents: spent)
+        return AccountInfo(email: email, plan: plan, monthlyCapCents: cap, spentCents: spent, totalTokens: tokens)
     }
 
     private static func getJSON(path: String, accessToken: String) async throws -> Any {
