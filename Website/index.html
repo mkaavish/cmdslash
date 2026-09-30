@@ -50,7 +50,9 @@ p{margin:0;}
   border-bottom:1px solid rgba(255,255,255,0.10);
 }
 .nav-inner{max-width:1180px;margin-inline:auto;padding-inline:32px;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
-.nav-left{display:flex;align-items:center;gap:28px;}
+.nav-left{display:flex;align-items:center;gap:22px;}
+.nav-github{display:inline-flex;align-items:center;color:var(--text-dim);transition:color 0.15s ease;}
+.nav-github:hover{color:var(--text);}
 .wordmark{font-family:'Questrial',var(--font-display);font-size:1.3rem;font-weight:400;letter-spacing:-0.01em;white-space:nowrap;color:var(--text);}
 .wordmark .slash{color:var(--text);}
 .wordmark.small{font-size:1.2rem;}
@@ -225,6 +227,8 @@ main section{padding-block:88px;}
 .tier-confirm{color:var(--text-faint);font-size:0.85rem;}
 .trust-pillars{font-family:var(--font-mono);font-size:0.85rem;letter-spacing:0.02em;color:var(--text-faint);margin:0 0 14px;}
 .trust-footnote{color:var(--text-faint);font-size:0.88rem;line-height:1.6;max-width:60ch;}
+.trust-link{color:var(--text-dim);text-decoration:underline;text-underline-offset:2px;}
+.trust-link:hover{color:var(--text);}
 
 /* pricing */
 .pricing{text-align:center;}
@@ -291,6 +295,8 @@ main section{padding-block:88px;}
 
 .site-footer{padding-block:44px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
 .site-footer p{color:var(--text-faint);font-size:0.85rem;}
+.footer-link{color:var(--text-faint);font-size:0.85rem;text-decoration:underline;text-underline-offset:2px;}
+.footer-link:hover{color:var(--text-dim);}
 
 @media (min-width:861px) and (max-width:1080px){
   .plan-grid{grid-template-columns:repeat(2,1fr);}
@@ -339,6 +345,9 @@ main section{padding-block:88px;}
   <div class="nav-inner">
     <div class="nav-left">
       <span class="wordmark">cmd<span class="slash">/</span></span>
+      <a href="https://github.com/mkaavish/cmdslash-priv" class="nav-github" aria-label="View source on GitHub" target="_blank" rel="noopener">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20.91 4.5a5.07 5.07 0 0 0-.09-3.77s-1.18-.35-3.91 1.48a13.38 13.38 0 0 0-7 0c-2.73-1.83-3.91-1.48-3.91-1.48A5.07 5.07 0 0 0 5.91 4.5a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7a3.37 3.37 0 0 0-.94 2.58V22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </a>
     </div>
     <a href="#waitlist" class="btn btn-primary btn-sm cta-scroll">Join the waitlist</a>
   </div>
@@ -578,7 +587,7 @@ main section{padding-block:88px;}
         </div>
       </div>
       <p class="trust-pillars">Local-first &middot; Explicit permissions &middot; Verified actions</p>
-      <p class="trust-footnote">CmdSlash is being built local-first, with on-device voice recognition by default. Distributed directly outside the Mac App Store, like other serious Mac automation tools.</p>
+      <p class="trust-footnote">CmdSlash is being built local-first, with on-device voice recognition by default. Distributed directly outside the Mac App Store, like other serious Mac automation tools. The source is open on <a href="https://github.com/mkaavish/cmdslash-priv" class="trust-link" target="_blank" rel="noopener">GitHub</a>, so you can see exactly what it does before you trust it with your Mac.</p>
     </div>
   </section>
 
@@ -749,6 +758,7 @@ main section{padding-block:88px;}
 <footer class="site-footer">
   <span class="wordmark small">cmd<span class="slash">/</span></span>
   <p>A native macOS agent, in development.</p>
+  <a href="https://github.com/mkaavish/cmdslash-priv" class="footer-link" target="_blank" rel="noopener">Open source on GitHub</a>
 </footer>
 
 <script>
