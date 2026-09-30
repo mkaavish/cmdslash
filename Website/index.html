@@ -51,8 +51,6 @@ p{margin:0;}
 }
 .nav-inner{max-width:1180px;margin-inline:auto;padding-inline:32px;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
 .nav-left{display:flex;align-items:center;gap:22px;}
-.nav-github{display:inline-flex;align-items:center;color:var(--text-dim);transition:color 0.15s ease;}
-.nav-github:hover{color:var(--text);}
 .wordmark{font-family:'Questrial',var(--font-display);font-size:1.3rem;font-weight:400;letter-spacing:-0.01em;white-space:nowrap;color:var(--text);}
 .wordmark .slash{color:var(--text);}
 .wordmark.small{font-size:1.2rem;}
@@ -80,9 +78,6 @@ p{margin:0;}
 .btn-primary:active{transform:translateY(1px) scale(0.98);box-shadow:inset 0 1px 0 rgba(255,255,255,0.9),0 4px 12px -6px rgba(0,0,0,0.5);}
 .btn-sm{padding:9px 18px;font-size:0.85rem;}
 .btn-lg{padding:14px 28px;font-size:1rem;}
-.btn-secondary{background:transparent;color:var(--text);border:1px solid var(--border);padding:12px 20px;font-size:0.92rem;}
-.btn-secondary:hover{border-color:rgba(255,255,255,0.3);background:var(--surface-2);}
-.btn-secondary:active{transform:translateY(1px) scale(0.98);}
 
 /* keycaps: shared by the hero demo and the "one shortcut" section */
 .keycap{min-width:52px;height:52px;padding:0 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.3rem;color:var(--text);box-shadow:0 2px 0 var(--border-soft),0 14px 28px -14px rgba(0,0,0,0.55);}
@@ -230,77 +225,10 @@ main section{padding-block:88px;}
 .trust-link{color:var(--text-dim);text-decoration:underline;text-underline-offset:2px;}
 .trust-link:hover{color:var(--text);}
 
-/* pricing */
-.pricing{text-align:center;}
-.pricing .section-title{margin-inline:auto;margin-bottom:12px;}
-.pricing .section-subtitle{margin-inline:auto;margin-bottom:36px;}
-.pricing-toggle-row{display:flex;justify-content:center;margin-bottom:40px;}
-.pricing-toggle{display:inline-flex;align-items:center;gap:2px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:4px;}
-.toggle-btn{border:none;background:transparent;color:var(--text-dim);font-family:var(--font-display);font-weight:600;font-size:0.85rem;padding:9px 18px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background 0.2s ease,color 0.2s ease;}
-.toggle-btn.is-active{background:var(--text);color:var(--bg);}
-.toggle-badge{margin-left:6px;font-size:0.75rem;opacity:0.7;}
-.plan-grid{display:grid;grid-template-columns:repeat(4,1fr);align-items:start;gap:18px;text-align:left;margin-bottom:16px;}
-.plan-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px;}
-.plan-card-highlight{border-color:rgba(255,255,255,0.16);background:linear-gradient(135deg,var(--accent-soft),transparent 55%),var(--surface);}
-.plan-label{font-family:var(--font-mono);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-faint);margin:0 0 12px;}
-.plan-name{font-size:1.15rem;font-weight:600;margin:0 0 8px;}
-.plan-position{color:var(--text-dim);font-size:0.9rem;line-height:1.5;min-height:2.7em;margin:0 0 22px;}
-.plan-price{display:flex;align-items:baseline;gap:8px;transition:opacity 0.2s ease,transform 0.2s ease;}
-.plan-price.is-fading{opacity:0;transform:translateY(3px);}
-.plan-price-amount{font-family:var(--font-mono);font-size:2rem;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;}
-.plan-price-period{color:var(--text-dim);font-size:0.9rem;}
-.plan-billing{display:flex;flex-direction:column;gap:4px;margin:8px 0 18px;transition:opacity 0.2s ease,transform 0.2s ease;}
-.plan-billing.is-fading{opacity:0;transform:translateY(3px);}
-.plan-billing-line{font-family:var(--font-display);font-size:0.88rem;color:var(--text-dim);}
-.plan-billing-renew{font-size:0.8rem;color:var(--text-faint);}
-.plan-features{list-style:none;margin:0 0 26px;padding:0;display:flex;flex-direction:column;gap:10px;}
-.plan-feature{display:flex;align-items:flex-start;gap:8px;font-size:0.87rem;color:var(--text-dim);line-height:1.45;}
-.plan-feature svg{flex-shrink:0;margin-top:2px;color:var(--text-faint);}
-.plan-card .btn{width:100%;padding:12px 20px;font-size:0.92rem;}
-.pricing-annual-note{font-family:var(--font-mono);font-size:0.85rem;color:var(--text-faint);text-align:center;min-height:1.4em;margin:0 0 48px;}
-.unlimited-demo{max-width:640px;margin:0 auto 48px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 26px;text-align:center;}
-.unlimited-heading{font-size:0.98rem;font-weight:600;color:var(--text);margin:0 0 16px;}
-.unlimited-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;text-align:left;}
-.unlimited-cmd{font-family:var(--font-mono);font-size:0.85rem;color:var(--text-dim);flex:1;min-width:200px;}
-.unlimited-tag{flex-shrink:0;font-family:var(--font-mono);font-size:0.72rem;color:var(--text-faint);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 10px;white-space:nowrap;}
-.unlimited-tag-good{color:var(--good);border-color:rgba(74,222,128,0.28);}
-.unlimited-divider{height:1px;background:var(--border-soft);margin:6px 0;}
-.pricing-value{color:var(--text-dim);font-size:0.95rem;margin:0 0 20px;}
-.pricing-compare{max-width:360px;margin:0 auto;display:flex;flex-direction:column;gap:8px;}
-.pricing-compare-row{display:flex;justify-content:space-between;gap:12px;font-family:var(--font-mono);font-size:0.85rem;color:var(--text);padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);}
-.pricing-compare-row-muted{color:var(--text-faint);background:transparent;border-color:var(--border-soft);}
-
-/* final cta */
-.cta{text-align:center;}
-.beta-tag{font-family:var(--font-mono);font-size:0.78rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-faint);margin:0 0 16px;}
-.cta .section-title{margin-inline:auto;}
-.cta-lede{color:var(--text-dim);font-size:1rem;max-width:48ch;margin:0 auto 34px;}
-.waitlist-form{max-width:440px;margin-inline:auto;}
-.field-group{display:flex;gap:10px;}
-.email-input{
-  flex:1;min-width:0;border-radius:999px;padding:13px 20px;
-  font-family:var(--font-display);font-size:0.95rem;color:var(--text);
-  background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02)),rgba(29,31,39,0.5);
-  backdrop-filter:blur(18px) saturate(180%);
-  -webkit-backdrop-filter:blur(18px) saturate(180%);
-  border:1px solid rgba(255,255,255,0.14);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.10);
-}
-.email-input::placeholder{color:var(--text-dim);}
-.email-input:focus{outline:none;border-color:rgba(255,255,255,0.32);}
-.form-error{color:var(--danger);font-size:0.85rem;margin-top:10px;text-align:left;}
-.form-success{display:flex;flex-direction:column;align-items:center;gap:14px;}
-.form-success .step-icon{color:var(--good);}
-.form-success p{color:var(--text-dim);font-size:1rem;max-width:40ch;}
-
 .site-footer{padding-block:44px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
 .site-footer p{color:var(--text-faint);font-size:0.85rem;}
 .footer-link{color:var(--text-faint);font-size:0.85rem;text-decoration:underline;text-underline-offset:2px;}
 .footer-link:hover{color:var(--text-dim);}
-
-@media (min-width:861px) and (max-width:1080px){
-  .plan-grid{grid-template-columns:repeat(2,1fr);}
-}
 
 @media (max-width:860px){
   .hero-inner{grid-template-columns:1fr;gap:44px;padding-inline:20px;}
@@ -312,8 +240,6 @@ main section{padding-block:88px;}
   .workflow-grid{grid-template-columns:1fr;}
   .workflow-card-flagship{grid-column:auto;}
   .tiers{grid-template-columns:1fr;}
-  .plan-grid{grid-template-columns:1fr;}
-  .field-group{flex-direction:column;}
   main section{padding-block:64px;}
   .nav-inner{padding-inline:20px;}
   .container{padding-inline:20px;}
@@ -323,8 +249,6 @@ main section{padding-block:88px;}
 
 @media (max-width:480px){
   .keycap-lg{min-width:64px;height:64px;border-radius:18px;font-size:1.7rem;}
-  .toggle-btn{padding:8px 14px;font-size:0.8rem;}
-  .toggle-badge{margin-left:4px;font-size:0.68rem;}
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -335,7 +259,6 @@ main section{padding-block:88px;}
   .nav,.overlay-panel{background:var(--surface) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
   .btn-primary{background:var(--text) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
   .btn-primary::before{display:none;}
-  .email-input{background:var(--surface) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
 }
 </style>
 </head>
@@ -345,11 +268,8 @@ main section{padding-block:88px;}
   <div class="nav-inner">
     <div class="nav-left">
       <span class="wordmark">cmd<span class="slash">/</span></span>
-      <a href="https://github.com/mkaavish/cmdslash-priv" class="nav-github" aria-label="View source on GitHub" target="_blank" rel="noopener">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20.91 4.5a5.07 5.07 0 0 0-.09-3.77s-1.18-.35-3.91 1.48a13.38 13.38 0 0 0-7 0c-2.73-1.83-3.91-1.48-3.91-1.48A5.07 5.07 0 0 0 5.91 4.5a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7a3.37 3.37 0 0 0-.94 2.58V22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-      </a>
     </div>
-    <a href="#waitlist" class="btn btn-primary btn-sm cta-scroll">Join the waitlist</a>
+    <a href="https://github.com/mkaavish/cmdslash" class="btn btn-primary btn-sm" target="_blank" rel="noopener">View on GitHub</a>
   </div>
 </header>
 
@@ -361,7 +281,7 @@ main section{padding-block:88px;}
         <h1 class="hero-title">Your Mac, on command.</h1>
         <p class="hero-lede">Press <kbd>&#8984;</kbd> <kbd>/</kbd>. Say what you want. CmdSlash does the rest.</p>
         <p class="hero-tagline">A native AI agent for your Mac.</p>
-        <a href="#waitlist" class="btn btn-primary btn-lg cta-scroll">Join the waitlist</a>
+        <a href="https://github.com/mkaavish/cmdslash" class="btn btn-primary btn-lg" target="_blank" rel="noopener">View on GitHub</a>
       </div>
       <div class="hero-visual">
         <div class="overlay-mock">
@@ -587,178 +507,17 @@ main section{padding-block:88px;}
         </div>
       </div>
       <p class="trust-pillars">Local-first &middot; Explicit permissions &middot; Verified actions</p>
-      <p class="trust-footnote">CmdSlash is being built local-first, with on-device voice recognition by default. Distributed directly outside the Mac App Store, like other serious Mac automation tools. The source is open on <a href="https://github.com/mkaavish/cmdslash-priv" class="trust-link" target="_blank" rel="noopener">GitHub</a>, so you can see exactly what it does before you trust it with your Mac.</p>
+      <p class="trust-footnote">CmdSlash is being built local-first, with on-device voice recognition by default. Distributed directly outside the Mac App Store, like other serious Mac automation tools. The source is open on <a href="https://github.com/mkaavish/cmdslash" class="trust-link" target="_blank" rel="noopener">GitHub</a>, so you can see exactly what it does before you trust it with your Mac.</p>
     </div>
   </section>
 
-  <section class="pricing" id="pricing">
-    <div class="container">
-      <p class="beta-tag">Planned launch pricing</p>
-      <h2 class="section-title">Simple pricing.</h2>
-      <p class="section-subtitle">Start small. Upgrade when CmdSlash becomes part of your day.</p>
-
-      <div class="pricing-toggle-row">
-        <div class="pricing-toggle" role="group" aria-label="Billing period">
-          <button type="button" class="toggle-btn is-active" id="toggleMonthly" aria-pressed="true">Monthly</button>
-          <button type="button" class="toggle-btn" id="toggleAnnual" aria-pressed="false">Annual<span class="toggle-badge">Save 20%</span></button>
-        </div>
-      </div>
-
-      <div class="plan-grid">
-
-        <div class="plan-card" data-plan="basic">
-          <h3 class="plan-name">Basic</h3>
-          <p class="plan-position">Automate everyday Mac tasks.</p>
-          <div class="plan-price">
-            <span class="plan-price-amount" id="basicAmount">$0.99</span>
-            <span class="plan-price-period" id="basicPeriod">/month</span>
-          </div>
-          <div class="plan-billing" id="basicBilling"></div>
-          <ul class="plan-features">
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> &#8984; / global shortcut</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Voice + text commands</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Open apps, files, folders, and URLs</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Basic Mac actions</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Limited AI agent usage</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Limited cross-app workflows</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Try advanced workflows</li>
-          </ul>
-          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Basic">Join the waitlist</a>
-        </div>
-
-        <div class="plan-card" data-plan="student">
-          <p class="plan-label">Student pricing</p>
-          <h3 class="plan-name">Student</h3>
-          <p class="plan-position">Built for school, coding, and everything in between.</p>
-          <div class="plan-price">
-            <span class="plan-price-amount" id="studentAmount">$4.99</span>
-            <span class="plan-price-period" id="studentPeriod">/month</span>
-          </div>
-          <div class="plan-billing" id="studentBilling"></div>
-          <ul class="plan-features">
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Basic</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Generous AI agent usage</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Cross-app workflows</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Coding agent</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Longer tasks</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Advanced AI models</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Canvas &#8594; Calendar workflows</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> File and document workflows</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Student-focused workflows</li>
-          </ul>
-          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Student">Get student access</a>
-        </div>
-
-        <div class="plan-card plan-card-highlight" data-plan="plus">
-          <p class="plan-label">Most popular</p>
-          <h3 class="plan-name">Plus</h3>
-          <p class="plan-position">For people who want CmdSlash throughout their day.</p>
-          <div class="plan-price">
-            <span class="plan-price-amount" id="plusAmount">$9.99</span>
-            <span class="plan-price-period" id="plusPeriod">/month</span>
-          </div>
-          <div class="plan-billing" id="plusBilling"></div>
-          <ul class="plan-features">
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Basic</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Higher AI agent usage</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Cross-app workflows</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Coding agent</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Advanced AI models</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Longer tasks</li>
-          </ul>
-          <a href="#waitlist" class="btn btn-secondary cta-scroll" data-plan="Plus">Get Plus</a>
-        </div>
-
-        <div class="plan-card" data-plan="pro">
-          <p class="plan-label">Full CmdSlash</p>
-          <h3 class="plan-name">Pro</h3>
-          <p class="plan-position">For people who run CmdSlash constantly, all day long.</p>
-          <div class="plan-price">
-            <span class="plan-price-amount" id="proAmount">$19.99</span>
-            <span class="plan-price-period" id="proPeriod">/month</span>
-          </div>
-          <div class="plan-billing" id="proBilling"></div>
-          <ul class="plan-features">
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Everything in Plus</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Unlimited basic commands</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Highest AI agent usage</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Full cross-app workflows</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Coding agent</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Advanced AI models</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Longer autonomous tasks</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Priority execution where applicable</li>
-            <li class="plan-feature"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg> Full workflow capabilities</li>
-          </ul>
-          <a href="#waitlist" class="btn btn-primary cta-scroll" data-plan="Pro">Go Pro</a>
-        </div>
-
-      </div>
-
-      <p class="pricing-annual-note" id="pricingAnnualNote"></p>
-
-      <div class="unlimited-demo">
-        <p class="unlimited-heading">Unlimited commands. AI when you need it.</p>
-        <div class="unlimited-row">
-          <span class="unlimited-cmd">&#8984;/ Open Spotify</span>
-          <span class="unlimited-tag unlimited-tag-good">Unlimited</span>
-        </div>
-        <div class="unlimited-row">
-          <span class="unlimited-cmd">&#8984;/ Open Downloads</span>
-          <span class="unlimited-tag unlimited-tag-good">Unlimited</span>
-        </div>
-        <div class="unlimited-row">
-          <span class="unlimited-cmd">&#8984;/ Launch VS Code</span>
-          <span class="unlimited-tag unlimited-tag-good">Unlimited</span>
-        </div>
-        <div class="unlimited-divider"></div>
-        <div class="unlimited-row">
-          <span class="unlimited-cmd">&#8984;/ Find my project, fix this error, run the tests, and verify it works.</span>
-          <span class="unlimited-tag">AI agent workflow</span>
-        </div>
-      </div>
-
-      <p class="pricing-value">Priced below many premium AI tools.</p>
-      <div class="pricing-compare">
-        <div class="pricing-compare-row"><span>CmdSlash Plus</span><span>$9.99/mo</span></div>
-        <div class="pricing-compare-row pricing-compare-row-muted"><span>Many premium AI tools</span><span>$15-$20+/mo</span></div>
-      </div>
-
-    </div>
-  </section>
-
-  <section class="cta" id="waitlist">
-    <div class="container">
-      <p class="beta-tag">Private beta &middot; macOS</p>
-      <h2 class="section-title">Be one of the first to use CmdSlash.</h2>
-      <p class="cta-lede">We're inviting a small group of Mac users to test CmdSlash before launch.</p>
-
-      <form class="waitlist-form" id="waitlistForm">
-        <div class="field-group">
-          <label for="email" class="visually-hidden">Email address</label>
-          <input type="email" id="email" name="email" class="email-input" placeholder="you@gmail.com" required="required">
-          <input type="hidden" name="plan_interest" id="planInterest" value="">
-          <button type="submit" class="btn btn-primary">Join the waitlist &rarr;</button>
-        </div>
-        <p class="form-error" id="waitlistError" hidden></p>
-      </form>
-
-      <div class="form-success" id="waitlistSuccess" hidden>
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15"></circle><path d="M8 12.5l2.5 2.5L16 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-        <p>You're on the list. We'll reach out when a spot opens.</p>
-      </div>
-
-    </div>
-  </section>
 
 </main>
 
 <footer class="site-footer">
   <span class="wordmark small">cmd<span class="slash">/</span></span>
   <p>A native macOS agent, in development.</p>
-  <a href="https://github.com/mkaavish/cmdslash-priv" class="footer-link" target="_blank" rel="noopener">Open source on GitHub</a>
+  <a href="https://github.com/mkaavish/cmdslash" class="footer-link" target="_blank" rel="noopener">Open source on GitHub</a>
 </footer>
 
 <script>
@@ -769,108 +528,6 @@ main section{padding-block:88px;}
   try {
     reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch (e) {}
-
-  /* CTA scroll-to-waitlist + focus (captures plan interest when present) */
-  var ctaLinks = document.querySelectorAll('.cta-scroll');
-  for (var i = 0; i < ctaLinks.length; i++) {
-    ctaLinks[i].addEventListener('click', function (e) {
-      e.preventDefault();
-      var plan = e.currentTarget.getAttribute('data-plan');
-      var planInput = $('planInterest');
-      if (plan && planInput) { planInput.value = plan; }
-      var target = $('waitlist');
-      if (target) {
-        target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
-      }
-      setTimeout(function () {
-        var emailInput = $('email');
-        if (emailInput) { emailInput.focus(); }
-      }, reduced ? 0 : 550);
-    });
-  }
-
-  /* Pricing nav link: plain smooth scroll, no focus-stealing */
-  var pricingNavLink = document.querySelector('.nav-pricing-link');
-  if (pricingNavLink) {
-    pricingNavLink.addEventListener('click', function (e) {
-      e.preventDefault();
-      var target = $('pricing');
-      if (target) {
-        target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
-      }
-    });
-  }
-
-  /* Pricing: centralized config + Monthly/Annual toggle */
-  var PRICING = {
-    basic: { monthly: 0.99, annualFirstYear: 7.49, annualRegular: 9.99 },
-    student: { monthly: 4.99, annualFirstYear: 35.99, annualRegular: 47.99 },
-    plus: { monthly: 9.99, annualFirstYear: 71.99, annualRegular: 95.99 },
-    pro: { monthly: 19.99, annualFirstYear: 143.99, annualRegular: 191.99 }
-  };
-  var toggleMonthlyBtn = $('toggleMonthly');
-  var toggleAnnualBtn = $('toggleAnnual');
-  var annualNote = $('pricingAnnualNote');
-
-  function money(n) {
-    return '$' + n.toFixed(2);
-  }
-
-  function applyPricing(period) {
-    var isAnnual = period === 'annual';
-    ['basic', 'student', 'plus', 'pro'].forEach(function (key) {
-      var cfg = PRICING[key];
-      var amountEl = $(key + 'Amount');
-      var periodEl = $(key + 'Period');
-      var billingEl = $(key + 'Billing');
-      if (!amountEl) { return; }
-      if (isAnnual) {
-        amountEl.textContent = money(cfg.annualFirstYear);
-        periodEl.textContent = 'first year';
-        var perMonth = (cfg.annualFirstYear / 12).toFixed(2);
-        billingEl.innerHTML =
-          '<span class="plan-billing-line">≈ $' + perMonth + '/mo first year</span>' +
-          '<span class="plan-billing-line plan-billing-renew">Billed annually. Renews at ' + money(cfg.annualRegular) + '/year.</span>';
-      } else {
-        amountEl.textContent = money(cfg.monthly);
-        periodEl.textContent = '/month';
-        billingEl.innerHTML = '';
-      }
-    });
-    if (annualNote) {
-      annualNote.textContent = isAnnual ? '20% off annually · 3 months free first year' : '';
-    }
-  }
-
-  function setPricingPeriod(period, animate) {
-    var isAnnual = period === 'annual';
-    toggleMonthlyBtn.classList.toggle('is-active', !isAnnual);
-    toggleMonthlyBtn.setAttribute('aria-pressed', String(!isAnnual));
-    toggleAnnualBtn.classList.toggle('is-active', isAnnual);
-    toggleAnnualBtn.setAttribute('aria-pressed', String(isAnnual));
-
-    if (reduced || !animate) {
-      applyPricing(period);
-      return;
-    }
-    var fadeEls = document.querySelectorAll(
-      '.plan-card[data-plan="basic"] .plan-price, .plan-card[data-plan="basic"] .plan-billing,' +
-      '.plan-card[data-plan="student"] .plan-price, .plan-card[data-plan="student"] .plan-billing,' +
-      '.plan-card[data-plan="plus"] .plan-price, .plan-card[data-plan="plus"] .plan-billing,' +
-      '.plan-card[data-plan="pro"] .plan-price, .plan-card[data-plan="pro"] .plan-billing'
-    );
-    fadeEls.forEach(function (el) { el.classList.add('is-fading'); });
-    setTimeout(function () {
-      applyPricing(period);
-      fadeEls.forEach(function (el) { el.classList.remove('is-fading'); });
-    }, 180);
-  }
-
-  if (toggleMonthlyBtn && toggleAnnualBtn) {
-    applyPricing('monthly');
-    toggleMonthlyBtn.addEventListener('click', function () { setPricingPeriod('monthly', true); });
-    toggleAnnualBtn.addEventListener('click', function () { setPricingPeriod('annual', true); });
-  }
 
   /* Hero product demo: idle keycaps -> listening -> executing -> done -> loop */
   var idle = $('panel-idle');
@@ -1018,24 +675,6 @@ main section{padding-block:88px;}
     }
   }
 
-  /* Waitlist form */
-  var form = $('waitlistForm');
-  var errorEl = $('waitlistError');
-  var successEl = $('waitlistSuccess');
-
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var email = form.elements['email'].value.trim();
-    var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!re.test(email)) {
-      errorEl.textContent = 'Enter a valid email address.';
-      errorEl.hidden = false;
-      return;
-    }
-    errorEl.hidden = true;
-    form.hidden = true;
-    successEl.hidden = false;
-  });
 })();
 </script>
 
