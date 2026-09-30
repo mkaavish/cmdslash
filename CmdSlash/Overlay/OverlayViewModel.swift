@@ -377,7 +377,7 @@ final class OverlayViewModel {
 
         let classification: OpenAIClient.ClassificationResult
         do {
-            let client = OpenAIClient()
+            let client = try OpenAIClient()
             classification = try await client.classifyFastPathIntent(text, context: context, conversationHistory: conversationHistoryForPrompt)
         } catch {
             guard !Task.isCancelled else { return }
@@ -450,7 +450,7 @@ final class OverlayViewModel {
         for _ in 1...maxSteps {
             let turn: OpenAIClient.AgenticTurn
             do {
-                let client = OpenAIClient()
+                let client = try OpenAIClient()
                 turn = try await client.sendAgenticTurn(messages: messages, context: context, conversationHistory: conversationHistoryForPrompt)
             } catch {
                 guard !Task.isCancelled else { return }

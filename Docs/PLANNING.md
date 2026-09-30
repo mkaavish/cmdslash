@@ -336,7 +336,7 @@ Local-first by default: audit log, memory, and preferences live in local SQLite 
 
 CmdSlash's own API keys/tokens live in the macOS Keychain under its own service identifier — nothing else. It **never** reads Keychain items belonging to other apps, browser saved-password stores, or `.env`/credential files as part of task execution; the filesystem and terminal tools enforce a hard blocklist (`~/.ssh`, `~/.aws`, any path containing `.env`, `id_rsa*`, Keychain database files, and common credential-store paths) at the tool layer — this is a deny-list check the tool performs before touching a path, independent of whether the model "knows" not to.
 
-The specific credential held there is changing: currently a BYOK provider API key (`com.cmdslash.apikeys.openai`); under the managed-key pivot (§59) it becomes a CmdSlash account/session token instead, with the provider key living only in the backend. The Keychain-as-the-only-secret-store principle above is unaffected either way.
+**BYOK, permanently — see §61.** §59/§60's managed-key pivot was reverted; CmdSlash is open source now, so there's no backend to hold a provider key on anyone's behalf even if it wanted to. The credential held in Keychain is a user-supplied OpenAI API key (`com.cmdslash.apikeys.openai`), entered via the companion window's API Key section (`CmdSlash/Companion/APIKeyView.swift`) and used only in direct requests to `api.openai.com` — never sent anywhere else, never committed to the repo.
 
 ## 35. Memory
 
@@ -590,9 +590,14 @@ Win the developer/power-user wedge first by being the fastest, most trustworthy 
 
 ## 51. Monetization
 
-Freemium subscription: a free tier covering fast-path/low-risk actions on cheap models (enough to be genuinely useful for "open app/find file"-class tasks, functioning as the funnel); a Pro tier (~$20–30/mo) covering generous agentic/coding-agent usage; a bring-your-own-API-key option for power users who want unlimited usage on their own provider billing (a credible option specifically because this audience already has Anthropic/OpenAI API accounts from using coding agents). Team tier deferred until there's a team feature to sell.
+**No monetization — open source, per §61.** §59/§60's managed-key backend and Stripe integration were built, then fully reverted: CmdSlash is now a BYOK, open-source macOS app with no account system, no metering, and no revenue model. Anyone running it supplies their own OpenAI API key (§34) and pays OpenAI directly.
 
-**Superseded by §59.** BYOK was reconsidered in favor of capturing real revenue from AI usage itself, not just a subscription fee sitting alongside a pass-through key the user pays the provider for directly — the tier structure (Basic/Student/Plus/Pro) still stands, and each tier's usage caps and margin now depend on CmdSlash's own metered backend rather than the user's own billing. Final prices and AI budgets are confirmed in §60.1: $0.99/$4.99/$9.99/$19.99 per month (annual options at a 20% discount), with each tier's AI spending cap fixed at 10/20/25/30% of that tier's revenue.
+<details>
+<summary>Original freemium plan (historical, abandoned)</summary>
+
+Freemium subscription: a free tier covering fast-path/low-risk actions on cheap models (enough to be genuinely useful for "open app/find file"-class tasks, functioning as the funnel); a Pro tier (~$20–30/mo) covering generous agentic/coding-agent usage; a bring-your-own-API-key option for power users who want unlimited usage on their own provider billing (a credible option specifically because this audience already has Anthropic/OpenAI API accounts from using coding agents). Team tier deferred until there's a team feature to sell. This was later reconsidered in favor of a managed backend (§59/§60) with tiers Basic/Student/Plus/Pro at $0.99/$4.99/$9.99/$19.99 per month — then abandoned entirely in favor of open-sourcing the project (§61).
+
+</details>
 
 ## 52. AI/API Costs
 
@@ -644,7 +649,9 @@ Not built in V1, but not architecturally foreclosed: the **tool protocol** (`Too
 
 CmdSlash becomes the default way its users operate a computer at all for anything beyond the most trivial, single-glance actions — the layer between "I want X" and the dozen clicks X used to take, across every app, not just the ones with good APIs. The durable bet is that this layer has to be native, fast, and verification-first to earn the trust required to actually be used that way, and that starting from the hardest, highest-trust use case (a coding agent operating your actual repo) rather than the easiest demo (dictating a text message) is what makes the trust durable once it's earned.
 
-## 59. Managed API Key Backend (Monetization Pivot)
+## 59. Managed API Key Backend (Monetization Pivot) — **ABANDONED, see §61**
+
+**This entire section was built, then fully reverted on 2026-09-30.** CmdSlash is open source now (§61) — kept below as a historical record of what was built and why, not as a description of the current app. Do not build against this section; §34/§51 describe the current (BYOK) reality.
 
 **Supersedes §51's BYOK-inclusive framing and §34's Keychain-held-provider-key model.** The pricing conversation converged on wanting real revenue from AI usage itself, not just a subscription fee sitting alongside a pass-through BYOK key the user pays the provider for directly. This section plans the shift from "the app is a pure client hitting the provider's API directly" (§59.1, what exists today) to "the app talks to a CmdSlash-owned backend that meters and relays every request" (§59.2 onward). Not started; planning only.
 
@@ -725,7 +732,9 @@ Content-Type: application/json
 
 **Net client-side diff this implies for `OpenAIClient.swift`:** the request URL (`api.openai.com` → the Edge Function URL) and the `Authorization` header's source (Keychain-held OpenAI key → Keychain-held Supabase session token). `sendRequest`'s body-building, and `message(from:)`/`toolCall(from:)`'s response-parsing, are otherwise untouched.
 
-## 60. Stripe Subscription Integration
+## 60. Stripe Subscription Integration — **ABANDONED, see §61**
+
+**Built through step 4 of §60.8 (test-mode Products/Prices, schema, Customer Portal, checkout/portal Edge Functions), then fully reverted on 2026-09-30** along with §59. Kept below as a historical record only — see §61 for what was actually removed and why.
 
 Detailed plan for §59.4 item 3, the last blocking gap before a real launch: today every account gets the schema's default `monthly_cap_cents` (60, i.e. $0.60/mo) regardless of what anyone pays, because nothing writes a different value. This section makes `plan`/`monthly_cap_cents` in `profiles` actually reflect a paid subscription.
 
@@ -780,10 +789,19 @@ create table public.plan_limits (
 
 insert into public.plan_limits (plan, monthly_cap_cents, per_task_max_cents, stripe_price_id_monthly, stripe_price_id_annual) values
   ('basic', 10, 2, null, null),
-  ('student', 100, 15, 'price_...', 'price_...'),   -- filled in after creating the Stripe Prices (§60.4)
-  ('plus', 250, 40, 'price_...', 'price_...'),
-  ('pro', 600, 100, 'price_...', 'price_...');
+  ('student', 100, 15, 'price_1UKMI1DTv1gPrWBpLqYEGBrh', 'price_1UKMI1DTv1gPrWBpDrW7pLjq'),
+  ('plus', 250, 40, 'price_1UKMI2DTv1gPrWBpaNsdk9sv', 'price_1UKMI2DTv1gPrWBpxM5MHUfC'),
+  ('pro', 600, 100, 'price_1UKMI3DTv1gPrWBpBtMHXVKP', 'price_1UKMI3DTv1gPrWBpZGO2YJS6');
+
+-- Readable by anyone, not just the row's owner — it's plan metadata (what each tier costs and
+-- grants), not a user's own data, and the macOS app's upgrade UI needs to read it directly.
+alter table public.plan_limits enable row level security;
+
+create policy "plan_limits_select_all" on public.plan_limits
+  for select using (true);
 ```
+
+Test-mode Products/Prices/Customer Portal already created and verified (§60.8 step 2, done 2026-09-27): Products `prod_VL2MsqjAluQq7v` (Student), `prod_VL2MPZ6K1h5f8H` (Plus), `prod_VL2MgteueFQrqU` (Pro); Portal config `bpc_1UKMISDTv1gPrWBpcBfcFBEH` (cancel + plan-switching enabled across all three). `STRIPE_SECRET_KEY` is set as a Supabase Edge Function secret. Migration applied and verified as `20260927175605_stripe_billing.sql`.
 
 No RLS-visible change needed beyond what `profiles_select_own` already grants — a user can already read their own `plan`; `stripe_customer_id`/`subscription_id` ride along under the same policy (harmless to expose to the row's owner) and are only ever written by the webhook handler via the service-role client, same pattern as `usage_events` today.
 
@@ -821,8 +839,8 @@ New secrets (`supabase secrets set`, same mechanism already used for `OPENAI_API
 ### 60.8 Phased Build Order
 
 1. ✅ **Done.** Tier prices/caps confirmed (§60.1): $0.99/$4.99/$9.99/$19.99 monthly (matching annual with a 20% discount), AI budgets at 10/20/25/30% of revenue, per-task ceilings.
-2. ⬜ Stripe account + test-mode Products, each with a monthly and annual Price; Customer Portal enabled (§60.4).
-3. ⬜ Migration: `profiles` columns + corrected Basic default + `plan_limits` table (two Price IDs and a per-task max per plan), seeded (§60.3).
+2. ✅ **Done.** Stripe test-mode Products (Student/Plus/Pro) each with monthly + annual Prices, created via the API and verified against §60.1's exact numbers; Customer Portal configuration created with cancel + cross-plan switching enabled (§60.4). `STRIPE_SECRET_KEY` set as a Supabase secret.
+3. ✅ **Done.** Migration `20260927175605_stripe_billing.sql` applied and verified: `profiles` gained `stripe_customer_id`/`stripe_subscription_id`/`subscription_status` plus the corrected Basic default (10 cents); `plan_limits` created and seeded with all 4 rows, readable via the anon key (added a `plan_limits_select_all` RLS policy — plan metadata, not a user's own data, so it's world-readable rather than gated like `profiles`/`usage_events`, since the app's upgrade UI needs to read it directly).
 4. ⬜ `create-checkout-session` + `create-portal-session` Edge Functions; verify by hand with `curl` against a test account before touching the app.
 5. ⬜ `stripe-webhook` Edge Function + registered endpoint (Stripe Dashboard, or `stripe listen --forward-to` for local testing); verify each event type with Stripe CLI's `stripe trigger <event>` against a test subscription, confirming `profiles` updates correctly and idempotently (fire the same event twice).
 6. ⬜ `chat-relay`'s per-task ceiling check (§60.5's last bullet).
@@ -836,3 +854,25 @@ New secrets (`supabase secrets set`, same mechanism already used for `OPENAI_API
 - **Failed payments.** `invoice.payment_failed` isn't handled in §60.5's first pass — decide the policy (grace period before downgrading vs. immediate) before launch, not after the first real failed card.
 - **Tax.** Stripe Tax isn't enabled in this plan — fine for an initial launch, but worth flagging before this scales past a hobby-revenue level.
 - **Refunds/proration on plan changes.** The Billing Portal handles proration by Stripe's own default rules; no custom logic planned here — acceptable unless real usage surfaces a case that needs overriding.
+
+## 61. Reversal: Back to BYOK for Open Source (2026-09-30)
+
+Decision: stop monetizing CmdSlash and open-source it instead. §59/§60's managed-key backend and Stripe integration are fully reverted from the app; CmdSlash is BYOK again, permanently this time — there's no commercial entity behind it anymore to run a backend for.
+
+**Code removed from the macOS app:**
+- `CmdSlash/Auth/` (entire folder: `SupabaseSession.swift`, `SupabaseAuthClient.swift`, `AuthView.swift`) — the account/session system.
+- `CmdSlash/Companion/AccountView.swift` — replaced by `CmdSlash/Companion/APIKeyView.swift`, a plain Keychain-backed "paste your OpenAI key" field, no account required.
+- `supabase/` (entire directory: `chat-relay`, `create-checkout-session`, `create-portal-session` Edge Functions, all migrations, `config.toml`) — the whole backend.
+- `OpenAIClient.swift` reverted to calling `api.openai.com` directly with a Keychain-held user API key (`init()` throws again if no key is stored — callers in `OverlayViewModel.swift` updated to `try`), instead of relaying through Supabase with a session token.
+- `AppDelegate.swift`: removed the Supabase session gate and "Sign Out" menu item; the companion-window launch gate now checks for a stored OpenAI key instead of a session.
+- `CompanionView.swift`: sidebar section renamed Account → **API Key**.
+
+**Left alone deliberately (not commercial-specific):** the companion window itself, the Settings section (hotkey remap, launch-at-login), the calendar/browser/coding-agent tooling — none of that was built *for* monetization, it just happened to ship during the same period.
+
+**Secret-safety check performed before committing:** grepped the full working tree and entire git history (`git log --all -p`) for Stripe/OpenAI/Supabase secret-shaped strings (`sk_test_`, `sk_live_`, `rk_live_`, `rk_test_`, `sk-proj-`, `SERVICE_ROLE_KEY`, etc.) — nothing found. The Supabase anon key that was embedded in `SupabaseSession.swift` is gone along with that file; it was safe-by-design to expose even before removal (Supabase's own public/anon key, not a secret), but moot now regardless. No API key of any kind is committed to the repo — the only key involved is each user's own, entered at runtime and stored only in their local Keychain.
+
+**Not torn down (separate from the git repo, left as-is pending your call):**
+- The live Supabase project (`zwyakbxgdjplsqoxhnpy`) — still exists with its schema, Edge Functions, and the `STRIPE_SECRET_KEY`/`OPENAI_API_KEY` secrets set on it.
+- The Stripe test-mode Products/Prices/Customer Portal config created in §60.8 step 2.
+
+Neither is referenced by the app anymore, so neither poses a "public API key" risk to the open-sourced repo — but both are still live, billable(-ish) cloud resources. Worth deciding separately whether to delete the Supabase project and/or archive the Stripe test-mode objects, or just leave them dormant.

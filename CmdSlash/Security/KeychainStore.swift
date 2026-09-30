@@ -50,10 +50,8 @@ enum KeychainStore {
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Upsert, not insert-only — needed for the Supabase session (§59): its refresh token rotates
-    /// on every use (using one invalidates it and issues a replacement), so the stored value has
-    /// to be overwritable in place, unlike the static provider API keys this type originally only
-    /// ever read.
+    /// Upsert, not insert-only — lets the companion window's API Key section overwrite an
+    /// existing key in place rather than requiring delete-then-add.
     static func writeString(_ value: String, service: String, account: String = NSUserName()) throws {
         let data = Data(value.utf8)
         let query: [String: Any] = [
@@ -75,9 +73,9 @@ enum KeychainStore {
         }
     }
 
-    /// Needed for sign-out (§59) — succeeds even if nothing was there to delete, since "no
-    /// session" is the desired end state either way, not an error case the caller needs to
-    /// special-case.
+    /// Needed for the "Remove" action in the companion window's API Key section — succeeds even
+    /// if nothing was there to delete, since "no key stored" is the desired end state either way,
+    /// not an error case the caller needs to special-case.
     static func delete(service: String, account: String = NSUserName()) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

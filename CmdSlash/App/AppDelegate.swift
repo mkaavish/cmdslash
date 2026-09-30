@@ -1,14 +1,13 @@
 import AppKit
 
 /// App lifecycle for the menu-bar-only (`LSUIElement`) process: the status item, the pre-warmed
-/// overlay, the global hotkey (Docs/PLANNING.md §10, §16), and — since the managed-key pivot
-/// (§59) — the companion window (sign-in, and eventually settings/connectors) the app now needs.
+/// overlay, the global hotkey (Docs/PLANNING.md §10, §16), and the companion window (API key
+/// entry, settings, and eventually connectors) the app also exposes.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var overlayController: OverlayWindowController?
     private var hotKey: GlobalHotKey?
     private var companionWindowController: CompanionWindowController?
-    private var signOutMenuItem: NSMenuItem?
     private var toggleMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -23,11 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             name: HotKeySettings.hotKeyChangedNotification, object: nil
         )
 
-        // A soft gate, not a hard block: shows the companion window on launch when there's no
-        // session, but it's an ordinary closable window, not modal — ⌘/ still works (and fails
-        // with SupabaseSession.SessionError's own clear message) if someone dismisses it and
+        // A soft gate, not a hard block: shows the companion window on launch when no API key is
+        // stored yet, but it's an ordinary closable window, not modal — ⌘/ still works (and fails
+        // with OpenAIClient's own clear "no Keychain item" error) if someone dismisses it and
         // tries anyway, rather than the app refusing to do anything at all.
-        if !SupabaseSession.hasStoredSession() {
+        if (try? KeychainStore.readString(service: "com.cmdslash.apikeys.openai")) == nil {
             companionWindowController?.show()
         }
     }
@@ -50,11 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         openCompanion.target = self
         menu.addItem(openCompanion)
 
-        let signOut = NSMenuItem(title: "Sign Out", action: #selector(signOut), keyEquivalent: "")
-        signOut.target = self
-        menu.addItem(signOut)
-        signOutMenuItem = signOut
-
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit CmdSlash", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -65,12 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
     }
 
-    /// Recomputed each time the menu is about to open rather than once at setup — session state
-    /// (sign-in/sign-out from the companion window, or a refresh failing) and the hotkey binding
-    /// (remapped from Settings) can both change between opens. "Open CmdSlash..." stays visible
-    /// either way — it's the sign-in surface too now.
+    /// Recomputed each time the menu is about to open rather than once at setup — the hotkey
+    /// binding (remapped from Settings) can change between opens.
     func menuWillOpen(_ menu: NSMenu) {
-        signOutMenuItem?.isHidden = !SupabaseSession.hasStoredSession()
         toggleMenuItem?.title = "Toggle CmdSlash (\(HotKeySettings.description()))"
     }
 
@@ -94,9 +85,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showCompanion() {
         companionWindowController?.show()
-    }
-
-    @objc private func signOut() {
-        SupabaseSession.signOut()
     }
 }

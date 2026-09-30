@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import Carbon.HIToolbox
 
-/// The companion window's Settings section (Docs/PLANNING.md §16, §59) — the global hotkey
+/// The companion window's Settings section (Docs/PLANNING.md §16) — the global hotkey
 /// (previously hardcoded to ⌘/) and launch-at-login, the two settings expected of any menu-bar
 /// utility. Connectors is the next section planned, not built yet.
 struct SettingsView: View {

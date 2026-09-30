@@ -1,21 +1,16 @@
 import Foundation
 import os
 
-/// Minimal Chat Completions API client, talking to CmdSlash's own Supabase Edge Function relay
-/// (Docs/PLANNING.md §59) rather than OpenAI directly — the managed-key pivot away from BYOK.
-/// Two request shapes share the same action tools (§21): a single-shot fast-path classification
-/// (§26-28) and a real multi-turn agentic loop (§20, §29) for requests that need more than one
-/// tool chained together. Non-streaming for now — streaming (§40) is a later upgrade to the same
-/// request shape, not an architecture change. Single model tier by design (unlike the old
-/// Haiku/Sonnet split): one model handles both the fast path and the agentic loop.
+/// Minimal OpenAI Chat Completions API client — talks to OpenAI directly using a user-supplied
+/// API key (BYOK), read from the macOS Keychain (Docs/PLANNING.md §34). Two request shapes share
+/// the same action tools (§21): a single-shot fast-path classification (§26-28) and a real
+/// multi-turn agentic loop (§20, §29) for requests that need more than one tool chained together.
+/// Non-streaming for now — streaming (§40) is a later upgrade to the same request shape, not an
+/// architecture change. Single model tier by design (unlike the old Haiku/Sonnet split): one
+/// model handles both the fast path and the agentic loop.
 ///
-/// Auth is a Supabase session, not a static provider key — every request first exchanges the
-/// Keychain-held refresh token for a fresh access token via `SupabaseSession.refreshAccessToken()`
-/// (shared with `SupabaseAuthClient` and the companion window's Account section, not duplicated
-/// here — see that type for the rotation/expiry handling).
-///
-/// NOTE: "gpt-5.4-mini" below has been confirmed against a live call through the relay (§59
-/// Phase 1 verification) — a real, valid model identifier, not a guess.
+/// NOTE: "gpt-5.4-mini" below has been confirmed against a live OpenAI API call as a real, valid
+/// model identifier, not a guess.
 struct OpenAIClient {
     struct ToolCall {
         let name: String
@@ -42,8 +37,6 @@ struct OpenAIClient {
         let finalText: String?
     }
 
-    // Session-refresh failures surface as SupabaseSession.SessionError directly (it already has
-    // its own clear, user-facing message) rather than being wrapped into this type.
     enum ClientError: Error, LocalizedError {
         case httpError(Int, String)
         case invalidResponse
@@ -51,20 +44,20 @@ struct OpenAIClient {
         var errorDescription: String? {
             switch self {
             case .httpError(let code, let body):
-                "CmdSlash relay returned \(code): \(body.prefix(300))"
+                "OpenAI API returned \(code): \(body.prefix(300))"
             case .invalidResponse:
-                "Couldn't parse the relay's response."
+                "Couldn't parse the OpenAI API response."
             }
         }
     }
 
     private static let logger = Logger(subsystem: "com.cmdslash.CmdSlash", category: "OpenAIClient")
 
-    private static let relayURL = "\(SupabaseSession.supabaseURL)/functions/v1/chat-relay"
-
+    private let apiKey: String
     private let model: String
 
-    init(model: String = "gpt-5.4-mini") {
+    init(model: String = "gpt-5.4-mini") throws {
+        self.apiKey = try KeychainStore.readString(service: "com.cmdslash.apikeys.openai")
         self.model = model
     }
 
@@ -627,11 +620,9 @@ struct OpenAIClient {
             "parallel_tool_calls": false
         ]
 
-        let accessToken = try await SupabaseSession.refreshAccessToken()
-
-        var request = URLRequest(url: URL(string: Self.relayURL)!)
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -643,11 +634,10 @@ struct OpenAIClient {
         guard (200..<300).contains(http.statusCode) else {
             let responseBody = String(data: data, encoding: .utf8) ?? "<no body>"
             // .error, not .debug — persisted by default in unified logging (log show), unlike
-            // debug/info, and the relay's own error text (which includes OpenAI's, when it's the
-            // one that rejected the request) is the fastest way to diagnose a 400/402 here.
+            // debug/info, and the API's own error text is the fastest way to diagnose a 400 here.
             let requestBody = (try? JSONSerialization.data(withJSONObject: messages, options: [.prettyPrinted]))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "<couldn't serialize>"
-            Self.logger.error("Relay error \(http.statusCode, privacy: .public): \(responseBody, privacy: .public)\nRequest messages:\n\(requestBody, privacy: .public)")
+            Self.logger.error("OpenAI API error \(http.statusCode, privacy: .public): \(responseBody, privacy: .public)\nRequest messages:\n\(requestBody, privacy: .public)")
             throw ClientError.httpError(http.statusCode, responseBody)
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {

@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// Sections of the companion window (Docs/PLANNING.md §59) — Account and Settings today,
+/// Sections of the companion window (Docs/PLANNING.md §34) — API Key and Settings today,
 /// Connectors planned next.
 enum CompanionSection: String, CaseIterable, Identifiable {
-    case account = "Account"
+    case apiKey = "API Key"
     case settings = "Settings"
 
     var id: String { rawValue }
 
     var systemImage: String {
         switch self {
-        case .account: "person.circle"
+        case .apiKey: "key.fill"
         case .settings: "gearshape"
         }
     }
@@ -19,7 +19,7 @@ enum CompanionSection: String, CaseIterable, Identifiable {
 /// The companion window's root — a sidebar over its sections, matching the settings-like
 /// affordance the window is meant to have (account/settings/connectors, not a single flat page).
 struct CompanionView: View {
-    @State private var selection: CompanionSection? = .account
+    @State private var selection: CompanionSection? = .apiKey
 
     var body: some View {
         NavigationSplitView {
@@ -31,8 +31,8 @@ struct CompanionView: View {
             .navigationSplitViewColumnWidth(160)
         } detail: {
             switch selection {
-            case .account, .none:
-                AccountView()
+            case .apiKey, .none:
+                APIKeyView()
             case .settings:
                 SettingsView()
             }

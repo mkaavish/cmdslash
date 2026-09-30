@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The full companion app window — Account and Settings today, Connectors planned next
-/// (`CompanionView` owns the sidebar between them; Docs/PLANNING.md §59). Distinct from the ⌘/
+/// The full companion app window — API Key and Settings today, Connectors planned next
+/// (`CompanionView` owns the sidebar between them; Docs/PLANNING.md §34). Distinct from the ⌘/
 /// overlay: this is a deliberate, pinnable app surface, not a glanceable quick-command bar.
 ///
 /// Toggles the app's Dock presence while open — the standard technique for a menu-bar-only
