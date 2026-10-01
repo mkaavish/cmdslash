@@ -2,6 +2,8 @@
 
 **Tell your Mac what to do.**
 
+[![Website & Documentation](https://img.shields.io/badge/Website%20%26%20Documentation-Visit-18181B?style=for-the-badge)](https://cmdslash-priv.vercel.app/)
+
 CmdSlash is an open-source, native macOS menu-bar app that gives you a global AI command bar for your Mac.
 
 Press **⌘ /** from anywhere, type or speak what you want done, and CmdSlash's AI agent carries it out across your Mac.
@@ -11,6 +13,8 @@ Press **⌘ /** from anywhere, type or speak what you want done, and CmdSlash's 
 > "add a meeting tomorrow at 3pm"
 
 CmdSlash lives entirely in the menu bar with no Dock icon. The default global hotkey is **⌘ /** and can be remapped from Settings.
+
+---
 
 ## What CmdSlash Can Do
 
@@ -46,7 +50,7 @@ Type an instruction or use voice input. CmdSlash sends the instruction to the co
 
 For actions considered medium or high risk, CmdSlash stops and displays an on-screen confirmation before anything is executed.
 
-At any point during a task, you can Pause, Cancel, or Take Over.
+At any point during a task, you can **Pause**, **Cancel**, or **Take Over**.
 
 ---
 
@@ -86,26 +90,54 @@ Because CmdSlash uses your own API key, **your own OpenAI API usage costs apply*
 
 ## Build & Setup
 
-### 1. Clone the repo.
+### 1. Clone the repository
 
 ```bash
 git clone <repo-url>
 cd cmdslash
 ```
 
-### 2. Open CmdSlash.xcodeproj in Xcode.
+### 2. Open the project in Xcode
 
 ```bash
 open CmdSlash.xcodeproj
 ```
 
-### 3. Select the CmdSlash target → Signing & Capabilities → change Team to your own Apple ID / personal team (the repo's own team ID won't work for you — this is normal for any cloned Xcode project, not CmdSlash-specific).
+### 3. Configure signing
 
-### 4. Build and run (Cmd+R).
+Select:
 
-### 5. On first launch, the companion window opens automatically — paste your OpenAI API key (get one at platform.openai.com) into the API Key field and click Save.
+**CmdSlash target → Signing & Capabilities → Team**
 
-### 6. Press Cmd+/ (or your remapped hotkey) anywhere to open the overlay and try it.
+Change the Team to your own Apple ID / Personal Team.
+
+The repository's signing team ID will not work for other developers. This is normal for cloned Xcode projects.
+
+### 4. Build and run
+
+Press:
+
+```text
+⌘ R
+```
+
+### 5. Add your OpenAI API key
+
+On first launch, the companion window opens automatically.
+
+Paste your OpenAI API key into the **API Key** field and click **Save**.
+
+You can create an API key through the OpenAI platform.
+
+### 6. Open CmdSlash
+
+Press:
+
+```text
+⌘ /
+```
+
+—or your remapped hotkey—from anywhere on macOS to open the overlay.
 
 ---
 
@@ -180,9 +212,15 @@ CmdSlash includes an optional Chromium browser extension in a separate folder in
 
 The extension enables **tab reuse and richer browser control**.
 
-With the extension bridge, CmdSlash can navigate, click, and extract content from the browser.
+With the extension bridge, CmdSlash can:
 
-The main CmdSlash app works without the extension. Without it, URL-based actions fall back to opening new tabs or windows.
+- Navigate
+- Click
+- Extract content from the browser
+
+The main CmdSlash app works without the extension.
+
+Without it, URL-based actions fall back to opening new tabs or windows.
 
 ---
 
@@ -190,9 +228,11 @@ The main CmdSlash app works without the extension. Without it, URL-based actions
 
 CmdSlash is built around explicit user control.
 
-**Medium- and high-risk actions do not run automatically.** CmdSlash displays an on-screen confirmation and waits for your approval before executing them.
+**Medium- and high-risk actions do not run automatically.**
 
-During an active task, you can also:
+CmdSlash displays an on-screen confirmation and waits for your approval before executing them.
+
+During an active task, you can:
 
 - **Pause**
 - **Cancel**
@@ -224,3 +264,15 @@ Contributions are welcome.
 4. Open a pull request describing what you changed and why.
 
 Please keep pull requests focused and avoid bundling unrelated changes together.
+
+---
+
+<p align="center">
+  <strong>Tell your Mac what to do.</strong>
+</p>
+
+<p align="center">
+  <a href="https://cmdslash-priv.vercel.app/">
+    Website & Documentation
+  </a>
+</p>
